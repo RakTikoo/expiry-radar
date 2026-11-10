@@ -1,0 +1,8 @@
+{
+  "description": "clean: fixture valid-until date far in the future",
+  "expected_findings": [],
+  "expected_safe": 1,
+  "expected_exit": 0,
+  "now": "2026-11-10",
+  "days": 90
+}
