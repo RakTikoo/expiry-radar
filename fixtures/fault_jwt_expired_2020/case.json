@@ -1,0 +1,13 @@
+{
+  "description": "fault: genuinely expired JWT (exp 2020-01-01)",
+  "expected_findings": [
+    {
+      "kind": "jwt",
+      "status": "expired"
+    }
+  ],
+  "expected_safe": 0,
+  "expected_exit": 2,
+  "now": "2026-11-10",
+  "days": 90
+}
