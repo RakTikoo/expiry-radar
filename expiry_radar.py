@@ -42,6 +42,10 @@ MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MiB — larger files are listed as unscanne
 DEFAULT_DAYS = 90
 IGNORE_FILENAME = "expiry-radar.ignore"
 MAX_JWT_DECODED_SEGMENT = 64 * 1024  # decoded JWT header/payload cap
+MAX_JWT_JSON_DEPTH = 100  # deterministic nesting cap for JWT JSON segments:
+# json.loads' RecursionError threshold varies by Python version (a depth
+# that warns on 3.12 parses fine on newer interpreters), so depth is
+# measured explicitly before parsing instead of relying on the parser.
 
 SKIP_DIRS = {
     ".git", ".hg", ".svn", "__pycache__", "node_modules", ".venv", "venv",
@@ -549,6 +553,34 @@ def scan_jwts(data: bytes, rel: str, now, days, warnings,
     return findings
 
 
+def _json_exceeds_depth(raw: bytes, limit: int) -> bool:
+    """True if JSON in `raw` nests [ ] / { } deeper than `limit`.
+
+    Single pass, string- and escape-aware, early-exits past the limit —
+    so the check itself is O(limit) on hostile input, not O(len(raw))."""
+    depth = 0
+    in_string = False
+    escaped = False
+    for byte in raw:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif byte == 0x5C:  # backslash
+                escaped = True
+            elif byte == 0x22:  # double quote
+                in_string = False
+            continue
+        if byte == 0x22:
+            in_string = True
+        elif byte in (0x5B, 0x7B):  # [ {
+            depth += 1
+            if depth > limit:
+                return True
+        elif byte in (0x5D, 0x7D):  # ] }
+            depth -= 1
+    return False
+
+
 def _decode_jwt_expiry(header_b: bytes, payload_b: bytes):
     """Return (expiry_datetime_or_None, warning_or_None) for one token.
     (None, None) means 'not a JWT / no usable exp — stay silent';
@@ -557,6 +589,8 @@ def _decode_jwt_expiry(header_b: bytes, payload_b: bytes):
         header_raw = _b64url_decode(header_b)
         if len(header_raw) > MAX_JWT_DECODED_SEGMENT:
             return None, "JWT with oversized header segment — skipped"
+        if _json_exceeds_depth(header_raw, MAX_JWT_JSON_DEPTH):
+            return None, "JWT with deeply nested header JSON — skipped"
         header = json.loads(header_raw)
     except RecursionError:
         return None, "JWT with deeply nested header JSON — skipped"
@@ -568,6 +602,8 @@ def _decode_jwt_expiry(header_b: bytes, payload_b: bytes):
         payload_raw = _b64url_decode(payload_b)
         if len(payload_raw) > MAX_JWT_DECODED_SEGMENT:
             return None, "JWT with oversized payload segment — skipped"
+        if _json_exceeds_depth(payload_raw, MAX_JWT_JSON_DEPTH):
+            return None, "JWT with deeply nested payload JSON — skipped"
         payload = json.loads(payload_raw)
     except RecursionError:
         return None, "JWT with deeply nested payload JSON — skipped"
