@@ -1,0 +1,11 @@
+{
+  "description": "edge: 6MiB file exceeds the 5MiB cap \u2014 listed as unscanned (its expired JWT must NOT be silently passed, nor found)",
+  "expected_findings": [],
+  "expected_safe": 0,
+  "expected_exit": 0,
+  "expected_unscanned": [
+    "big.txt"
+  ],
+  "now": "2026-11-10",
+  "days": 90
+}
