@@ -1,0 +1,8 @@
+{
+  "description": "clean: historical dates in changelog/docs are history, not expiry fixtures",
+  "expected_findings": [],
+  "expected_safe": 0,
+  "expected_exit": 0,
+  "now": "2026-11-10",
+  "days": 90
+}
