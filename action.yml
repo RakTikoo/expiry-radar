@@ -1,0 +1,49 @@
+name: "Expiry Radar"
+description: "Fail CI when a committed certificate, JWT or fixture date in the repo is expired or about to expire."
+author: "Expiry Radar contributors"
+branding:
+  icon: "clock"
+  color: "orange"
+
+inputs:
+  path:
+    description: "Directory / repo root to scan"
+    required: false
+    default: "."
+  days:
+    description: "Warning window in days (artefacts expiring sooner are flagged)"
+    required: false
+    default: "90"
+  show-safe:
+    description: "Also list safe artefacts in the report"
+    required: false
+    default: "false"
+
+outputs:
+  exit-code:
+    description: "0 clean, 1 expiring within the window, 2 expired present, 3 usage error (bad inputs — a broken invocation, not a finding)"
+    value: ${{ steps.scan.outputs.exit-code }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.x"
+    - id: scan
+      shell: bash
+      run: |
+        args=()
+        if [ "${{ inputs.show-safe }}" = "true" ]; then args+=(--show-safe); fi
+        set +e
+        python3 "${{ github.action_path }}/expiry_radar.py" \
+          "${{ inputs.path }}" --days "${{ inputs.days }}" "${args[@]}" \
+          | tee expiry-radar-report.txt
+        code=${PIPESTATUS[0]}
+        set -e
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        # The Action fails the job on any finding (expired or expiring),
+        # and exit 3 (usage error) also fails it — as a broken
+        # invocation, distinguishable from findings by the code itself.
+        # Use the CLI directly in a workflow step if you want warn-only.
+        exit "$code"

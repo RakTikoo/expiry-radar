@@ -1,0 +1,9 @@
+# Expiry Radar's own test data intentionally contains expired artefacts:
+# the fixture corpus (planted faults), the test suite's inline examples,
+# and the fixture generator's pattern strings. Detection of all of these
+# is verified by the corpus tests (python3 run_tests.py), which scan the
+# fixture case directories directly — this file only blesses them for
+# whole-repo dogfood runs. See README.md, "expiry-radar.ignore".
+fixtures/
+tests/
+make_fixtures.py
