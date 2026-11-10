@@ -1,0 +1,13 @@
+{
+  "description": "fault: cert expired (30d cert, --now is +60d \u2014 see module docstring for why expiry is simulated through --now)",
+  "now": "2027-01-09",
+  "expected_findings": [
+    {
+      "kind": "certificate",
+      "status": "expired"
+    }
+  ],
+  "expected_safe": 0,
+  "expected_exit": 2,
+  "days": 90
+}
