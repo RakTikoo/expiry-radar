@@ -1,0 +1,13 @@
+{
+  "description": "fault: whole-file DER cert expiring within 30 days",
+  "expected_findings": [
+    {
+      "kind": "certificate",
+      "status": "expiring"
+    }
+  ],
+  "expected_safe": 0,
+  "expected_exit": 1,
+  "now": "2026-11-10",
+  "days": 90
+}
