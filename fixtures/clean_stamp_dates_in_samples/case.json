@@ -1,0 +1,8 @@
+{
+  "description": "clean: stamp/record dates in sample paths \u2014 a KiCad title-block drawing date and a recorded-on date carry no validity cue (regression case from the real-world KiCad run, see ANALYSIS.md)",
+  "expected_findings": [],
+  "expected_safe": 0,
+  "expected_exit": 0,
+  "now": "2026-11-10",
+  "days": 90
+}
