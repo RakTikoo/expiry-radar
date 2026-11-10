@@ -1,0 +1,8 @@
+{
+  "description": "clean: JWT with exp in 2036 is safe",
+  "expected_findings": [],
+  "expected_safe": 1,
+  "expected_exit": 0,
+  "now": "2026-11-10",
+  "days": 90
+}
