@@ -1,0 +1,13 @@
+{
+  "description": "fault: chained PEM \u2014 one far-future (safe), one expiring in 45 days (finding)",
+  "expected_findings": [
+    {
+      "kind": "certificate",
+      "status": "expiring"
+    }
+  ],
+  "expected_safe": 1,
+  "expected_exit": 1,
+  "now": "2026-11-10",
+  "days": 90
+}
