@@ -1,0 +1,17 @@
+{
+  "description": "fault: expired JWT + expiring cert \u2014 exit 2 wins",
+  "expected_findings": [
+    {
+      "kind": "jwt",
+      "status": "expired"
+    },
+    {
+      "kind": "certificate",
+      "status": "expiring"
+    }
+  ],
+  "expected_safe": 0,
+  "expected_exit": 2,
+  "now": "2026-11-10",
+  "days": 90
+}
