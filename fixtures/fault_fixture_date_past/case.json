@@ -1,0 +1,13 @@
+{
+  "description": "fault: fixture valid-until date in the past",
+  "expected_findings": [
+    {
+      "kind": "fixture-date",
+      "status": "expired"
+    }
+  ],
+  "expected_safe": 0,
+  "expected_exit": 2,
+  "now": "2026-11-10",
+  "days": 90
+}
