@@ -1,0 +1,13 @@
+{
+  "description": "fault (v0.2): JWKS key with exp in 2020; the second key has no exp and stays silent; reported once as a JWK finding, not double-counted as an epoch finding",
+  "expected_findings": [
+    {
+      "kind": "jwk-expiry",
+      "status": "expired"
+    }
+  ],
+  "expected_safe": 0,
+  "expected_exit": 2,
+  "now": "2026-11-11",
+  "days": 90
+}
