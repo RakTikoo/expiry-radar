@@ -7,6 +7,31 @@ dates that are already sitting there, and report days-to-expiry per item.
 Python standard library only. No network, no account, no token, no LLM.
 Scanned files are read as bytes and never executed.
 
+## See it work
+
+Real output (captured 2026-11-11, path abbreviated) — a scan of the
+[expiry-radar-dogfood](https://github.com/RakTikoo/expiry-radar-dogfood)
+demo repo, which plants an expired JWT and a certificate expiring
+inside the 90-day window:
+
+```console
+$ python3 expiry_radar.py expiry-radar-dogfood
+Expiry Radar 0.2.0 — expiry-radar-dogfood
+as of 2026-11-11 UTC, warning window 90d, files scanned: 4 (source: walk)
+
+[EXPIRED ] jwt          tests/auth_tokens.py:1  expires 2020-01-01T00:00:00Z (-2507d)  JWT exp claim  [eyJhbGci…]
+[EXPIRING] certificate  certs/api.pem:1  expires 2026-12-11T03:22:19Z (+29d)  subject: CN=api.consumer-sim.test, O=Consumer Sim; issuer: CN=api.consumer-sim.test, O=Consumer Sim  [PEM certificate]
+
+Summary: 1 expired, 1 expiring (<90d), 1 safe (counted, not listed unless --show-safe)
+Exit code: 2 (0 clean, 1 expiring, 2 expired, 3 usage error)
+```
+
+With the weekly workflow (below), that same report becomes **one
+living issue** in the repo. Watch the full lifecycle for real in
+[expiry-radar-dogfood#1](https://github.com/RakTikoo/expiry-radar-dogfood/issues/1):
+opened with these two findings, edited in place on the next run, and
+closed with "✅ Expiry Radar is clean" once the artefacts were fixed.
+
 ## Why
 
 Fixture certs, canned tokens and "valid until" dates are minted once and
