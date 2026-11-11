@@ -798,5 +798,451 @@ class TestCollectionEdgeCases(unittest.TestCase):
             self.assertEqual(result.findings, [])
 
 
+class TestEpochExpiry(unittest.TestCase):
+    """v0.2: epoch-seconds values of expiry-semantic keys only."""
+
+    def scan_text(self, text, rel="config/app.py"):
+        return er.scan_epochs(text, rel, NOW, 90)
+
+    def test_expired_env_style(self):
+        got = self.scan_text("TOKEN_EXPIRES_AT=1577836800\n",
+                             rel="config/app.env")
+        self.assertEqual([(f.kind, f.status) for f in got],
+                         [("epoch-expiry", "expired")])
+
+    def test_expiring_json_key(self):
+        got = self.scan_text('{"expires_at": 1796000000}\n')
+        self.assertEqual([f.status for f in got], ["expiring"])
+
+    def test_safe_far_future(self):
+        got = self.scan_text("SESSION_EXPIRES_AT = 4102444800\n")
+        self.assertEqual([f.status for f in got], ["safe"])
+
+    def test_jwt_style_exp_key(self):
+        got = self.scan_text('{"exp": 1577836800, "sub": "x"}\n')
+        self.assertEqual(len(got), 1)
+
+    def test_traps_do_not_flag(self):
+        text = (
+            "CACHE_TTL = 3600\n"
+            "SESSION_TTL_SECONDS = 86400\n"
+            '"expires_in": 7200,\n'
+            '"exp": 3600,\n'
+            '"created_at": 1577836800,\n'
+            '"updated_at": 1600000000,\n'
+            '"iat": 1577836800,\n'
+            '"expires_at": 1767225600000,\n'      # millisecond epoch
+            '"token_expires_at_ms": 1767225600000,\n'
+            "EXPIRY_CHECK_INTERVAL = 300\n"
+            '"valid_until": "2020-01-01",\n'       # ISO form, not epoch
+            '"expires_at": 9999999999999999999,\n'  # absurd future
+            '"expires_at": -5,\n'
+            '"expires_at": 1577836800.5,\n'        # fractional — not an epoch
+        )
+        self.assertEqual(self.scan_text(text), [])
+
+    def test_float_point_zero_spelling_flags(self):
+        got = self.scan_text('"expires_at": 1577836800.0\n')
+        self.assertEqual([f.status for f in got], ["expired"])
+
+    def test_claimed_occurrences_skipped(self):
+        # occurrence-level dedupe: the JWK scanner's claimed
+        # (line, value) is skipped; a different value on the same
+        # line is still reported (fix pass — whole-line exclusion
+        # silently dropped it)
+        from collections import Counter
+        text = ('{"exp": 1893456000, "expires_at": 1577836800, '
+                '"iat": 1}\n')
+        got = er.scan_epochs(text, "keys/jwks.json", NOW, 90,
+                             claims=Counter({(1, 1893456000): 1}))
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0].expires, "2020-01-01T00:00:00Z")
+        unclaimed = er.scan_epochs(text, "keys/jwks.json", NOW, 90)
+        self.assertEqual(len(unclaimed), 2)
+
+    def test_window_boundary(self):
+        # exactly at the window edge is expiring, one day beyond is safe
+        edge = int((NOW.timestamp()) + 89 * 86400)
+        got = self.scan_text(f'"expires_at": {edge}\n')
+        self.assertEqual([f.status for f in got], ["expiring"])
+
+
+class TestJwkExpiry(unittest.TestCase):
+    """v0.2: exp inside JWK/JWKS-shaped JSON."""
+
+    def scan_text(self, text, rel="keys/jwks.json"):
+        warnings = []
+        got, _claims = er.scan_jwks(text, rel, NOW, 90, warnings)
+        return got, warnings
+
+    def test_jwks_array_expired(self):
+        text = json.dumps({"keys": [
+            {"kty": "RSA", "kid": "a", "exp": 1577836800},
+            {"kty": "EC", "kid": "b"}]})
+        got, _ = self.scan_text(text)
+        self.assertEqual([(f.kind, f.status) for f in got],
+                         [("jwk-expiry", "expired")])
+
+    def test_single_jwk_expiring(self):
+        exp = int(NOW.timestamp()) + 10 * 86400
+        got, _ = self.scan_text(json.dumps({"kty": "RSA", "exp": exp}))
+        self.assertEqual([f.status for f in got], ["expiring"])
+
+    def test_no_exp_no_finding(self):
+        got, warnings = self.scan_text(
+            json.dumps({"keys": [{"kty": "RSA", "kid": "a"}]}))
+        self.assertEqual(got, [])
+        self.assertEqual(warnings, [])
+
+    def test_shape_must_validate(self):
+        # exp in plain JSON without kty/keys shape is the epoch rule's
+        # job, not the JWK rule's
+        got, _ = self.scan_text(json.dumps({"exp": 1577836800}),
+                                rel="data.json")
+        self.assertEqual(got, [])
+
+    def test_non_numeric_exp_warns_once(self):
+        text = json.dumps({"keys": [
+            {"kty": "RSA", "exp": "soon"}, {"kty": "EC", "exp": "later"}]})
+        got, warnings = self.scan_text(text)
+        self.assertEqual(got, [])
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("non-numeric", warnings[0])
+
+    def test_implausible_exp_values_silent(self):
+        # Fix pass (FP hunt): the JWK scanner now applies the epoch
+        # plausibility window. 10**30, the RSA public exponent 65537,
+        # and the no-expiry sentinels 0 / -1 are silently not
+        # expiries — the first version flagged them as 1970 dates.
+        for value in (10 ** 30, 65537, 0, -1):
+            got, warnings = self.scan_text(
+                json.dumps({"kty": "RSA", "exp": value}))
+            self.assertEqual(got, [], f"exp={value}")
+            self.assertEqual(warnings, [], f"exp={value}")
+
+    def test_infinite_exp_warns(self):
+        got, warnings = self.scan_text('{"kty": "RSA", "exp": 1e999}')
+        self.assertEqual(got, [])
+        self.assertTrue(any("non-integer" in w for w in warnings))
+
+    def test_deeply_nested_warns_not_crashes(self):
+        text = '{"keys": ' + "[" * 500 + "]" * 500 + "}"
+        got, warnings = self.scan_text(text)
+        self.assertEqual(got, [])
+        self.assertTrue(any("deeply nested" in w for w in warnings))
+
+    def test_malformed_named_jwks_warns(self):
+        got, warnings = self.scan_text('{"keys": [{"kty": "RSA", "exp": 1')
+        self.assertEqual(got, [])
+        self.assertTrue(any("does not parse" in w for w in warnings))
+
+    def test_malformed_unnamed_is_silent(self):
+        got, warnings = self.scan_text('{"keys": [{"kty": "RSA", "exp": 1',
+                                       rel="data/blob.json")
+        self.assertEqual(got, [])
+        self.assertEqual(warnings, [])
+
+    def test_no_key_material_in_finding(self):
+        text = json.dumps({"keys": [{"kty": "RSA", "kid": "secret-kid",
+                                     "n": "BIGMODULUSVALUE",
+                                     "exp": 1577836800}]})
+        got, _ = self.scan_text(text)
+        blob = json.dumps([f.to_dict() for f in got])
+        self.assertNotIn("BIGMODULUSVALUE", blob)
+        self.assertNotIn("secret-kid", blob)
+
+
+class TestOpensslExpiry(unittest.TestCase):
+    """v0.2: notAfter lines in committed openssl output."""
+
+    def scan_text(self, text):
+        return er.scan_openssl_text(text, "certs/out.txt", NOW, 90)
+
+    def test_dates_form_expired(self):
+        got = self.scan_text(
+            "notBefore=Dec 10 00:00:00 2024 GMT\n"
+            "notAfter=Jan 15 23:59:59 2025 GMT\n")
+        self.assertEqual([(f.kind, f.status) for f in got],
+                         [("openssl-expiry", "expired")])
+
+    def test_text_form_expiring(self):
+        got = self.scan_text("    Not After : Dec 25 00:00:00 2026 GMT\n")
+        self.assertEqual([f.status for f in got], ["expiring"])
+
+    def test_not_before_never_flags(self):
+        got = self.scan_text(
+            "notBefore=Jan 15 00:00:00 2020 GMT\n"
+            "    Not Before: Jan 15 00:00:00 2020 GMT\n")
+        self.assertEqual(got, [])
+
+    def test_space_padded_day(self):
+        got = self.scan_text("notAfter=Jan  5 00:00:00 2025 GMT\n")
+        self.assertEqual([f.status for f in got], ["expired"])
+
+    def test_invalid_calendar_date_skipped(self):
+        self.assertEqual(
+            self.scan_text("notAfter=Feb 30 00:00:00 2025 GMT\n"), [])
+
+    def test_unknown_month_skipped(self):
+        self.assertEqual(
+            self.scan_text("notAfter=Xyz 10 00:00:00 2025 GMT\n"), [])
+
+
+class TestSarif(unittest.TestCase):
+    """v0.2: --sarif output is valid SARIF 2.1.0 and cross-checks
+    against the JSON report result-for-result."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        with open(os.path.join(self.tmp, "session.json"), "w") as fh:
+            fh.write('{"expires_at": 1577836800}\n')
+        with open(os.path.join(self.tmp, "jwks.json"), "w") as fh:
+            fh.write(json.dumps(
+                {"keys": [{"kty": "RSA", "exp": 1577836800}]}))
+        # an oversize file -> unscanned, must surface in SARIF honestly
+        with open(os.path.join(self.tmp, "big.bin"), "wb") as fh:
+            fh.write(b"A" * (er.MAX_FILE_SIZE + 1))
+        self.result = er.scan(self.tmp, now=NOW, days=90)
+
+    def test_sarif_shape(self):
+        doc = er.render_sarif(self.result)
+        self.assertEqual(doc["version"], "2.1.0")
+        self.assertIn("sarif-2.1.0", doc["$schema"])
+        run = doc["runs"][0]
+        self.assertEqual(run["tool"]["driver"]["name"], "Expiry Radar")
+        self.assertEqual(run["tool"]["driver"]["version"], "0.2.0")
+        json.dumps(doc)  # serialisable
+
+    def test_results_crosscheck_json(self):
+        doc = er.render_sarif(self.result)
+        run = doc["runs"][0]
+        report = er.to_json_dict(self.result)
+        self.assertEqual(len(run["results"]),
+                         len(report["findings"]))
+        rule_ids = {r["id"] for r in run["tool"]["driver"]["rules"]}
+        for res, finding in zip(run["results"], report["findings"]):
+            self.assertEqual(res["ruleId"], finding["kind"])
+            self.assertIn(res["ruleId"], rule_ids)
+            loc = res["locations"][0]["physicalLocation"]
+            self.assertEqual(loc["artifactLocation"]["uri"],
+                             finding["path"])
+            self.assertEqual(loc["region"]["startLine"], finding["line"])
+            self.assertEqual(res["properties"]["status"],
+                             finding["status"])
+        levels = {r["properties"]["status"]: r["level"]
+                  for r in run["results"]}
+        self.assertEqual(levels["expired"], "error")
+
+    def test_unscanned_is_honest(self):
+        doc = er.render_sarif(self.result)
+        run = doc["runs"][0]
+        invocation = run["invocations"][0]
+        self.assertFalse(invocation["executionSuccessful"])
+        notes = invocation["toolExecutionNotifications"]
+        self.assertTrue(any(
+            n["associatedRule"]["id"] == "unscanned-file"
+            and "big.bin" in n["message"]["text"] for n in notes))
+        rule_ids = {r["id"] for r in run["tool"]["driver"]["rules"]}
+        self.assertIn("unscanned-file", rule_ids)
+
+    def test_clean_scan_execution_successful(self):
+        clean = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, clean, True)
+        with open(os.path.join(clean, "a.txt"), "w") as fh:
+            fh.write("nothing here\n")
+        doc = er.render_sarif(er.scan(clean, now=NOW, days=90))
+        run = doc["runs"][0]
+        self.assertEqual(run["results"], [])
+        self.assertTrue(run["invocations"][0]["executionSuccessful"])
+
+    def test_no_token_material_leaks(self):
+        blob = json.dumps(er.render_sarif(self.result))
+        self.assertNotIn("1577836800", blob)  # epoch values stay out too
+
+    def run_cli(self, *args):
+        return subprocess.run(
+            [sys.executable, os.path.join(ROOT, "expiry_radar.py"), *args],
+            capture_output=True, text=True, timeout=60)
+
+    def test_cli_sarif_exit_code_and_parse(self):
+        proc = self.run_cli(self.tmp, "--sarif", "--now", "2026-11-10")
+        self.assertEqual(proc.returncode, 2)  # expired findings
+        doc = json.loads(proc.stdout)
+        self.assertEqual(doc["version"], "2.1.0")
+        self.assertTrue(doc["runs"][0]["results"])
+
+    def test_cli_json_and_sarif_mutually_exclusive(self):
+        proc = self.run_cli(self.tmp, "--json", "--sarif")
+        self.assertEqual(proc.returncode, 3)  # usage error
+
+
+class TestV02FixPass(unittest.TestCase):
+    """Regression tests for the v0.2 adversarial fix pass (red team,
+    FP hunter, code auditor). One test per closed finding."""
+
+    # --- red team #1/#2/#3: quadratic paths are now linear -------------
+    def test_epoch_long_token_linear(self):
+        start = time.time()
+        got = er.scan_epochs("a" * 16000 + "\n", "x.txt", NOW, 90)
+        self.assertEqual(got, [])
+        self.assertLess(time.time() - start, 2.0)
+
+    def test_epoch_many_matches_one_line_linear(self):
+        line = "exp = 1577836800, " * 2000 + '"iat": 1\n'
+        start = time.time()
+        got = er.scan_epochs(line, "x.txt", NOW, 90)
+        self.assertEqual(len(got), 2000)
+        self.assertLess(time.time() - start, 3.0)
+
+    def test_jwk_many_keys_linear(self):
+        keys = [{"kty": "RSA", "exp": 1577836800 + i} for i in range(2000)]
+        text = json.dumps({"keys": keys}, indent=1)
+        warnings = []
+        start = time.time()
+        got, _ = er.scan_jwks(text, "keys/jwks.json", NOW, 90, warnings)
+        self.assertEqual(len(got), 2000)
+        self.assertLess(time.time() - start, 3.0)
+
+    # --- auditor #1 / red team #6: JWK line attribution ----------------
+    def test_jwk_line_attribution_with_kid_collision(self):
+        text = (
+            '{\n'
+            '  "keys": [\n'
+            '    {"kty": "RSA", "kid": "1577836800", "exp": 1893456000},\n'
+            '    {"kty": "EC", "exp": 1577836800}\n'
+            '  ]\n'
+            '}\n'
+        )
+        got, _ = er.scan_jwks(text, "keys/jwks.json", NOW, 90, [])
+        by_status = {f.status: f for f in got}
+        self.assertEqual(by_status["safe"].line, 3)
+        self.assertEqual(by_status["expired"].line, 4)
+
+    def test_jwk_duplicate_values_get_own_lines(self):
+        text = (
+            '{\n  "keys": [\n'
+            '    {"kty": "RSA", "exp": 1577836800},\n'
+            '    {"kty": "EC", "exp": 1577836800}\n'
+            '  ]\n}\n'
+        )
+        got, _ = er.scan_jwks(text, "keys/jwks.json", NOW, 90, [])
+        self.assertEqual([f.line for f in got], [3, 4])
+
+    # --- auditor #2 / red team #4: occurrence-level dedupe -------------
+    def test_compact_mixed_file_reports_both(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "mixed.json"), "w") as fh:
+                fh.write('{"expires_at": 1577836800, "keys": '
+                         '[{"kty": "RSA", "exp": 1893456000}]}')
+            result = er.scan(tmp, now=NOW, days=90)
+            kinds = sorted((f.kind, f.status) for f in result.findings)
+            self.assertEqual(kinds, [("epoch-expiry", "expired"),
+                                     ("jwk-expiry", "safe")])
+            self.assertEqual(result.exit_code(), 2)
+
+    # --- red team #5: unicode-escaped JWKS ------------------------------
+    def test_jwk_unicode_escaped_exp_found(self):
+        text = '{"keys": [{"kty": "RSA", "\\u0065xp": 1577836800}]}'
+        got, _ = er.scan_jwks(text, "keys/jwks.json", NOW, 90, [])
+        self.assertEqual([(f.kind, f.status) for f in got],
+                         [("jwk-expiry", "expired")])
+
+    # --- red team #9: string exp in JWKS is a JWK finding, once ---------
+    def test_jwk_string_exp_accepted_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "jwks.json")
+            with open(path, "w") as fh:
+                fh.write('{"kty": "RSA", "exp": "1577836800"}')
+            result = er.scan(tmp, now=NOW, days=90)
+            self.assertEqual(
+                [(f.kind, f.status) for f in result.findings],
+                [("jwk-expiry", "expired")])
+            self.assertEqual(result.warnings, [])
+
+    # --- auditor #3: epoch terminator -----------------------------------
+    def test_epoch_trailing_junk_rejected(self):
+        for text in ('"expires_at": 1577836800abc\n',
+                     '"expires_at": 1577836800seconds\n',
+                     '"expires_at": 1577836800_000\n',
+                     '"expires_at": 1577836800.0e3\n'):
+            self.assertEqual(er.scan_epochs(text, "x.json", NOW, 90),
+                             [], text)
+
+    # --- FP hunt #1/#2/#11: bare exp needs token context -----------------
+    def test_bare_exp_without_context_ignored(self):
+        self.assertEqual(
+            er.scan_epochs('{"exp": 1577836800}\n', "x.json", NOW, 90),
+            [])
+        self.assertEqual(
+            er.scan_epochs(
+                '{"players": [{"name": "x", "exp": 200000000}]}\n',
+                "hiscores.json", NOW, 90),
+            [])
+
+    def test_bare_exp_with_claim_context_flags(self):
+        got = er.scan_epochs('{"iat": 1577800000, "exp": 1577836800}\n',
+                             "x.json", NOW, 90)
+        self.assertEqual([f.status for f in got], ["expired"])
+
+    # --- FP hunt #6/#7/#10: doc containers --------------------------------
+    def test_doc_containers_suppress_new_kinds(self):
+        cases = {
+            "app.log": "TOKEN_EXPIRES_AT=1577836800\n",
+            "docs/payload.json": '{"expires_at": 1577836800}\n',
+            "CHANGELOG.json": '{"expires_at": 1577836800}\n',
+            ".env.example": "TOKEN_EXPIRES_AT=1577836800\n",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            for rel, content in cases.items():
+                full = os.path.join(tmp, rel)
+                os.makedirs(os.path.dirname(full), exist_ok=True)
+                with open(full, "w") as fh:
+                    fh.write(content)
+            result = er.scan(tmp, now=NOW, days=90)
+            self.assertEqual(result.findings, [])
+            self.assertEqual(result.suppressed_in_docs, 4)
+
+    # --- auditor #4: evidence masking with adjacent secrets --------------
+    def test_epoch_evidence_masks_quoted_secret(self):
+        line = ('{"expires_at": 1577836800, "note": '
+                '"password is correcthorsebatterystaple ok"}\n')
+        got = er.scan_epochs(line, "x.json", NOW, 90)
+        self.assertEqual(len(got), 1)
+        self.assertNotIn("correcthorsebatterystaple", got[0].evidence)
+
+    # --- auditor #5: epoch is an instant (documented divergence) ----------
+    def test_midnight_epoch_is_expired_by_midday(self):
+        midday = datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc)
+        epoch = int(datetime(2026, 11, 10,
+                             tzinfo=timezone.utc).timestamp())
+        got = er.scan_epochs(f'"expires_at": {epoch}\n', "x.json",
+                             midday, 90)
+        self.assertEqual([f.status for f in got], ["expired"])
+
+    # --- auditor #7: kty whitelist ---------------------------------------
+    def test_jwk_kty_whitelist(self):
+        got, _ = er.scan_jwks(
+            json.dumps({"kty": "WEIRD\nVALUE", "exp": 1577836800}),
+            "keys/jwks.json", NOW, 90, [])
+        self.assertEqual(got[0].evidence, "JWK (kty=unknown)")
+
+    # --- auditor #9 gap: SARIF with warnings resolves its rule ------------
+    def test_sarif_warning_rule_resolves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "broken.pem"), "w") as fh:
+                fh.write("-----BEGIN CERTIFICATE-----\n!!!\n"
+                         "-----END CERTIFICATE-----\n")
+            result = er.scan(tmp, now=NOW, days=90)
+            self.assertTrue(result.warnings)
+            doc = er.render_sarif(result)
+            run = doc["runs"][0]
+            rule_ids = {r["id"] for r in run["tool"]["driver"]["rules"]}
+            self.assertIn("scan-warning", rule_ids)
+            for note in run["invocations"][0][
+                    "toolExecutionNotifications"]:
+                self.assertIn(note["associatedRule"]["id"], rule_ids)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
