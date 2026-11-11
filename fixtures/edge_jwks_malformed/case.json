@@ -1,0 +1,9 @@
+{
+  "description": "edge (v0.2): file named as JWKS but its JSON is truncated \u2014 a warning (the name claims JWKS), no findings, no crash",
+  "expected_findings": [],
+  "expected_safe": 0,
+  "expected_exit": 0,
+  "expected_warnings_min": 1,
+  "now": "2026-11-11",
+  "days": 90
+}
