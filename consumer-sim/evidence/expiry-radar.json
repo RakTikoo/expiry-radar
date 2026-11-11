@@ -1,0 +1,48 @@
+{
+  "tool": "expiry-radar",
+  "version": "0.2.0",
+  "root": "/home/hatch/workspace/agentic-spikes/round3-trio/expiry-radar-v02/consumer-sim/repo",
+  "now": "2026-11-11T03:22:19Z",
+  "days": 90,
+  "file_source": "walk",
+  "files_scanned": 5,
+  "suppressed_in_docs": 0,
+  "summary": {
+    "expired": 1,
+    "expiring": 1,
+    "safe": 1,
+    "findings": 2,
+    "unscanned": 0,
+    "warnings": 2,
+    "suppressed_in_docs": 0
+  },
+  "findings": [
+    {
+      "kind": "jwt",
+      "status": "expired",
+      "path": "tests/auth_tokens.py",
+      "line": 1,
+      "expires": "2020-01-01T00:00:00Z",
+      "days_left": -2507,
+      "detail": "JWT exp claim",
+      "evidence": "eyJhbGci…"
+    },
+    {
+      "kind": "certificate",
+      "status": "expiring",
+      "path": "certs/api.pem",
+      "line": 1,
+      "expires": "2026-12-11T03:22:19Z",
+      "days_left": 29,
+      "detail": "subject: CN=api.consumer-sim.test, O=Consumer Sim; issuer: CN=api.consumer-sim.test, O=Consumer Sim",
+      "evidence": "PEM certificate"
+    }
+  ],
+  "safe": [],
+  "unscanned": [],
+  "warnings": [
+    "expiry_radar.py: unparseable PEM certificate block (line 130): non-base64 data in body",
+    "expiry_radar.py: unparseable PEM certificate block (line 132): non-base64 data in body"
+  ],
+  "exit_code": 2
+}

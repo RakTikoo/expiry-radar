@@ -1,0 +1,8 @@
+Expiry Radar 0.2.0 — as of 2026-11-11T03:22:19Z, warning window 90d, files scanned: 5
+
+[EXPIRED] jwt tests/auth_tokens.py:1  expires 2020-01-01T00:00:00Z (-2507d)  JWT exp claim
+[EXPIRING] certificate certs/api.pem:1  expires 2026-12-11T03:22:19Z (+29d)  subject: CN=api.consumer-sim.test, O=Consumer Sim; issuer: CN=api.consumer-sim.test, O=Consumer Sim
+
+Summary: 1 expired, 1 expiring, 1 safe, 0 unscanned, 2 warnings
+Warning: expiry_radar.py: unparseable PEM certificate block (line 130): non-base64 data in body
+Warning: expiry_radar.py: unparseable PEM certificate block (line 132): non-base64 data in body

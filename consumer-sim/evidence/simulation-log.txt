@@ -1,0 +1,7 @@
+consumer-sim simulation log (LOCAL — nothing ran on GitHub)
+scan exit code: 2 (2 = expired findings present -> the workflow updates the living issue; NOT a broken invocation)
+deliberately broken invocation (--days banana) exit code: 3 (3 = usage error -> the workflow fails as BROKEN INVOCATION, never as findings)
+findings in expiry-radar.json:
+  expired jwt tests/auth_tokens.py 2020-01-01T00:00:00Z
+  expiring certificate certs/api.pem 2026-12-11T03:22:19Z
+  exit_code field: 2
