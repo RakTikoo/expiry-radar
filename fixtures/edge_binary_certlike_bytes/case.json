@@ -1,1 +1,11 @@
-{"days":90,"description":"edge: binary blob with cert-like bytes — binary files are only trusted as whole-file DER, so zero findings and no crash; the blob is listed as unscanned (binary — not searched)","expected_exit":0,"expected_findings":[],"expected_safe":0,"expected_unscanned":["blob.bin"],"now":"2026-11-10"}
+{
+  "description": "edge: binary blob with cert-like bytes \u2014 binary files are only trusted as whole-file DER, so zero findings and no crash; the blob is listed as unscanned (binary \u2014 not searched)",
+  "expected_findings": [],
+  "expected_safe": 0,
+  "expected_exit": 0,
+  "expected_unscanned": [
+    "blob.bin"
+  ],
+  "now": "2026-11-11",
+  "days": 90
+}
