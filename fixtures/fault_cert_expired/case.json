@@ -1,6 +1,6 @@
 {
   "description": "fault: cert expired (30d cert, --now is +60d \u2014 see module docstring for why expiry is simulated through --now)",
-  "now": "2027-01-09",
+  "now": "2027-01-10",
   "expected_findings": [
     {
       "kind": "certificate",
