@@ -1,0 +1,13 @@
+{
+  "description": "fault (v0.2): single JWK object with exp 15 days after generation",
+  "expected_findings": [
+    {
+      "kind": "jwk-expiry",
+      "status": "expiring"
+    }
+  ],
+  "expected_safe": 0,
+  "expected_exit": 1,
+  "now": "2026-11-11",
+  "days": 90
+}
