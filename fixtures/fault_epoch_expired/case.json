@@ -1,0 +1,13 @@
+{
+  "description": "fault (v0.2): epoch expires_at in the past (2020-01-01)",
+  "expected_findings": [
+    {
+      "kind": "epoch-expiry",
+      "status": "expired"
+    }
+  ],
+  "expected_safe": 0,
+  "expected_exit": 2,
+  "now": "2026-11-11",
+  "days": 90
+}
