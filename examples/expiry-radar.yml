@@ -16,9 +16,11 @@
 # Requires: permissions issues: write (below). Uses the built-in
 # GITHUB_TOKEN via the gh CLI that ships on GitHub-hosted runners.
 #
-# NOTE: this workflow has NOT been executed on GitHub yet (the project
-# is a local pre-release build) — smoke-test it on a real repo before
-# relying on it.
+# NOTE: proven live on GitHub Actions (2026-11-11) in the dogfood repo
+# https://github.com/RakTikoo/expiry-radar-dogfood — across three runs
+# the tracking issue opened with the planted findings, was edited in
+# place on the next run, and was commented + closed once the artefacts
+# were fixed: https://github.com/RakTikoo/expiry-radar-dogfood/issues/1
 
 name: Expiry Radar
 
