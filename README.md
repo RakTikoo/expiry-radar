@@ -141,7 +141,7 @@ repo ships one for its own test corpus.
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: RakTikoo/expiry-radar@v1   # placeholder until published — see examples/
+- uses: RakTikoo/expiry-radar@v0.2
 ```
 
 Or copy [`examples/expiry-radar.yml`](examples/expiry-radar.yml) into
@@ -149,6 +149,16 @@ Or copy [`examples/expiry-radar.yml`](examples/expiry-radar.yml) into
 issue titled **⏰ Expiry Radar** with the current report (checking for the
 existing issue first with `gh issue list`), closing it when the repo is
 clean again.
+
+**Proven live (2026-11-11):** this exact workflow runs in the
+[expiry-radar-dogfood](https://github.com/RakTikoo/expiry-radar-dogfood)
+repo against two planted artefacts (an expired JWT and a certificate
+expiring within the window). Across three real GitHub Actions runs it
+opened [one tracking issue](https://github.com/RakTikoo/expiry-radar-dogfood/issues/1),
+edited that same issue in place on the second run, and — once the
+artefacts were fixed — commented "✅ Expiry Radar is clean" and closed
+it on the third. The `consumer-sim/` folder in this repo is the local
+rehearsal of the same lifecycle.
 
 ## MVP scope — what is NOT in v1
 

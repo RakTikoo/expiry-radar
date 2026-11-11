@@ -24,6 +24,12 @@ these notes.
    Action + weekly workflow in one of our own repos and watch the
    living issue open/update/close for real (the local consumer
    simulation in `consumer-sim/` is the rehearsal, not the proof).
+   **DONE 2026-11-11:** proven in
+   https://github.com/RakTikoo/expiry-radar-dogfood — three real
+   Actions runs: issue #1 opened with both planted findings, edited
+   in place on run 2, commented "✅ Expiry Radar is clean" and closed
+   on run 3 after the artefacts were fixed
+   (https://github.com/RakTikoo/expiry-radar-dogfood/issues/1).
 
 ## Draft release notes — v0.1 (2026-11-10)
 
@@ -67,8 +73,8 @@ First public release.
   no-expiry-sentinel false positives in JWK `exp` were all caught in
   review and fixed before release).
 - Local consumer-repo simulation included under `consumer-sim/`
-  (clearly labelled simulation evidence; the on-GitHub Action proof
-  still follows the v0.2 tag — see checklist step 6).
+  (clearly labelled simulation evidence; the on-GitHub proof followed
+  the v0.2 tag and completed 2026-11-11 — see checklist step 6).
 
 Known limitations remain as documented in ANALYSIS.md §6, plus the
 v0.2 notes there.
