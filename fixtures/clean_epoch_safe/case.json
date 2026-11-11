@@ -1,0 +1,8 @@
+{
+  "description": "clean (v0.2): epoch expires_at far in the future is safe",
+  "expected_findings": [],
+  "expected_safe": 1,
+  "expected_exit": 0,
+  "now": "2026-11-11",
+  "days": 90
+}
