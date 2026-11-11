@@ -1,0 +1,8 @@
+{
+  "keys": [
+    {"kty": "RSA", "kid": "sim-old", "use": "sig",
+     "n": "sXchDaQebHnPiGvyDOAT4saGEUetSyo9MKLOoWFsueri",
+     "exp": 1577836800},
+    {"kty": "EC", "kid": "sim-current", "use": "sig"}
+  ]
+}
