@@ -485,3 +485,201 @@ as specified, on the scanner itself.
   between) is bounded by the capped read but not eliminated; closing
   it needs `O_NOFOLLOW`/`dir_fd` plumbing disproportionate to this
   tool's threat model (local repos, CI checkouts).
+
+## v0.2 (built 2026-11-10, unreleased — local tree only)
+
+Built in `expiry-radar-v02/` from the pushed v0.1 tree (which is
+untouched). Scope, per the approved v0.2 wave: SARIF output, three new
+artefact classes from the §8 ladder item 2, corpus first, and
+Action-proof *preparation* (release notes + a local consumer
+simulation — no tag, no push, nothing run on GitHub).
+
+### What was added
+
+- **`--sarif`** — SARIF 2.1.0, following the CI Command Truth v0.2
+  pattern: results are exactly the findings the JSON report lists
+  (expired/expiring; safe added with `--show-safe`), every ruleId
+  resolves to a driver rule, unscanned files become tool-execution
+  notifications and set the invocation's `executionSuccessful` to
+  false, warnings become notifications too. `--json` + `--sarif` is a
+  usage error (exit 3). Exit codes are unchanged in SARIF mode. Tests
+  parse the SARIF and cross-check it result-for-result against the
+  JSON report (ruleId, URI, line, status).
+- **Epoch expiry values** (`epoch-expiry`) — a number that *is the
+  value* of an expiry-semantic key on its line. The key rule is
+  final-segment attribution: `exp`, `…expires_at`, `…valid_until`,
+  `…not_after`, `…expiry` qualify; trailing segments disqualify
+  (`expiry_check_interval`, and OAuth's `expires_in`, which is a
+  duration). Values must sit in the plausible epoch-seconds window
+  [100 000 000, 4 102 444 800] (1973-03-03 … 2100-01-01): the lower
+  bound rejects durations-in-disguise (ttl=3600), the upper bound
+  rejects millisecond epochs (1.7e12) outright. Fractional values are
+  rejected except the exact `.0` spelling. Classification is the exact
+  instant (unlike the ISO rule's end-of-day convention — an epoch *is*
+  an instant).
+- **JWK/JWKS `exp`** (`jwk-expiry`) — the document must parse as JSON
+  (behind the same deterministic depth guard as JWT segments) and
+  validate shape: a top-level `keys` array whose members carry `kty`,
+  or a single object with `kty`. Only `exp` and `kty` are read; key
+  material and `kid` never reach a finding (test-pinned). Non-numeric /
+  non-integer / out-of-range `exp` warns once per class per file.
+  Malformed candidates are silent unless the filename claims to be a
+  JWKS file. Lines claimed by a JWK finding are excluded from the
+  epoch scan, so a JWKS `exp` is reported once, as a JWK finding.
+- **OpenSSL text output** (`openssl-expiry`) — `notAfter=…` (the
+  `-dates`/`-enddate` form) and `Not After : …` (the `-text` form),
+  full timestamp + `GMT` required. `notBefore` never matches.
+
+### Corpus (regenerated, relative-date deterministic as before)
+
+33 cases (was 22): +4 clean, +6 fault, +1 edge. Planted findings
+19/19 found (13 old + 6 new: epoch ×2, JWK ×2, openssl ×2), 0 missed,
+0 false positives on clean/edge cases; the old 13/13 are unchanged.
+New FP traps live in `clean_epoch_traps` (ttl, `expires_in`, ms
+epochs, `created_at`/`updated_at`, sub-plausibility `exp`) and
+`clean_openssl_dates` (past `notBefore` + safe 2049 `notAfter`).
+Tests: 61 → 92 at first green (unit classes for all three new
+scanners + a SARIF class that cross-checks against JSON), → **109
+after the adversarial fix pass** below.
+
+### Real-world runs (`--now 2026-11-10`, v0.2 scanner)
+
+| Tree | Files | Findings | Verdict |
+|---|---|---|---|
+| skillscan-src | 91 | 0 | true negative (unchanged from v0.1; tree grew since v0.1's 82 files) |
+| stranger-suite-src | 47 | 0 | true negative (unchanged) |
+| kicad-preflight-src | 304 | 0 (26 unscanned) | true negative (unchanged); tree grew since v0.1's 282 files. Runtime ~11 s vs v0.1's ~7.5 s at 282 files — the three new line scanners cost real time on large trees; fine for CI/weekly use, noted honestly |
+| round4-pair/handoff-reconciler | 97 | 0 | true negative |
+| round4-pair/living-contract-diff | 55 | 0 | true negative |
+| round3-trio/ci-command-truth (v0.2 tree) | 143 | 0 | true negative |
+| round3-trio/expiry-radar (v0.1 tree) | 11 scanned, 53 unscanned (its ignore file) | 0 findings, 3 warnings | matches v0.1 dogfood behaviour |
+| expiry-radar-v02 (own tree, shipped ignore file incl. `consumer-sim/`) | 12 scanned, 86 unscanned | 0 findings, 1 safe, 3 warnings | the 1 safe is the scanner's own docstring quoting a full `notAfter=Dec 10 23:59:59 2027 GMT` example — the documented scanner-eats-its-own-docs class, safe status, exit 0; the 3 warnings are the known PEM-marker literals (as in v0.1) |
+
+New classes produced **0 false positives on every clean tree scanned**.
+
+### Action-proof preparation (local only)
+
+- `RELEASE_NOTES.md` — tagging checklist (v0.1 tag retroactively on
+  the pushed head `0244682`, v0.2 tag on the v0.2 head once pushed)
+  and draft release notes for both versions. Nothing tagged/pushed.
+- `consumer-sim/` — a throwaway consumer repo that installs the
+  scanner the documented vendored way, plants an expiring cert +
+  expired JWT, and executes the example weekly workflow's core steps
+  locally: single `--json` run → text report rendered from that JSON
+  by the workflow's own rendering code → the living-issue body, plus a
+  demonstration that exit 2 is findings while a broken invocation
+  exits 3. Evidence files under `consumer-sim/evidence/`. Labelled
+  simulation everywhere; the on-GitHub proof still requires the tag
+  (RELEASE_NOTES.md checklist step 6).
+
+### New limitations (v0.2)
+
+- Epoch values in *string* form with non-`.0` fractional parts, and
+  epochs written as scientific notation or hex, are not recognised —
+  precision over recall, consistent with §6.1.
+- The epoch rule is line-based like the ISO rule: a key and its value
+  split across lines (pretty-printed JSON always keeps them together;
+  a hand-wrapped file might not) is missed.
+- JWKS detection requires the literal substrings `"kty"`/`"keys"` and
+  `"exp"` before parsing (a cheap gate); a JWKS document using
+  single-quoted or otherwise non-JSON syntax is out of scope — it is
+  not JSON.
+- OpenSSL output without the `GMT` suffix (localised openssl output)
+  is not recognised.
+- SARIF results mirror the JSON findings list; safe artefacts appear
+  only with `--show-safe`, exactly as in JSON mode.
+
+### Adversarial review — v0.2 fix pass (three reviewers, all findings
+### hands-on reproduced by them and re-verified after the fix)
+
+**Closed:**
+1. **CRITICAL DoS (red team)** — the epoch assignment regex was
+   quadratic on long unbroken alphanumeric tokens (100 KB token
+   ≈ 370 s). Left-boundary lookbehind + 64-char key cap: the same
+   input now scans in ~0.00 s. Per-finding evidence masking over
+   unbounded lines was likewise quadratic (mask once per line, over
+   at most 2048 chars) and JWKS line lookup was O(keys × lines)
+   (one-pass candidate map). Perf regression tests pin all three.
+2. **HIGH (auditor + red team)** — JWK line attribution by substring
+   search put findings on wrong lines (duplicate values, prefix
+   collisions, values inside `kid`s) and the wrong line then defeated
+   the epoch dedupe, double-counting artefacts. Attribution is now
+   one-pass candidate consumption in document order.
+3. **HIGH (auditor + red team)** — the epoch dedupe excluded whole
+   lines, silently dropping a genuine expired `expires_at` sharing a
+   (minified) line with a JWK finding — exit 0 on an expired artefact.
+   Dedupe is now occurrence-level: (line, value) claims, consumed one
+   by one; unrelated values on the same line still report. Pinned by
+   an integration test (compact mixed file → both findings, exit 2).
+4. **HIGH (FP hunt)** — the JWK scanner had no plausibility window:
+   `exp: 65537` (the RSA public exponent in some export formats) and
+   the no-expiry sentinels `exp: 0` / `exp: -1` flagged as 1970
+   expiries. The epoch window now applies; implausible values are
+   silently not expiries. Digit-string exps are accepted as values
+   (and reported once, as JWK findings — the first version both
+   warned "non-numeric" *and* flagged them as epochs).
+5. **HIGH (FP hunt)** — bare `exp` is overloaded (game experience
+   points at exactly epoch magnitudes, "expected" in test code,
+   experiment ids). A bare `exp` now requires token context (a sibling
+   `iat`/`sub`/`iss`/`aud` key in the file); suffixed forms are
+   unambiguous and unchanged.
+6. **MEDIUM (FP hunt)** — doc exemption missed the containers
+   historical expiry data lives in: `.log` files (historical records,
+   like changelogs), files under a `docs/` path part, doc stems with
+   data extensions (`CHANGELOG.json`, `HISTORY.yaml`), template
+   suffixes (`.env.example`, `*.sample`, `*.template`, `*.dist`) and
+   extensionless `NOTES`. All are now exempt *and counted* as
+   `suppressed_in_docs`; code extensions still defeat stems.
+7. **MEDIUM (auditor)** — epoch values with trailing junk flagged
+   (`1577836800abc`, `…_000`, and `1577836800.0e3`, a ms-scale value
+   misread as seconds). The terminator now rejects any word char or
+   dot after the value.
+8. **MEDIUM (auditor)** — evidence masking leaked space-separated
+   secrets inside quoted strings on the finding's line. Quoted
+   contents > 12 chars and standalone 24+ char token runs are now
+   masked before the cap.
+9. **MEDIUM (red team)** — unicode-escaped JWKS keys (`\u0065xp`)
+   evaded the literal substring gates entirely. Gates now admit any
+   brace-led document mentioning the markers or containing escapes;
+   `json.loads` decodes. (Line attribution for escaped keys falls
+   back to line 1 — the value/kind/status are right, the line is
+   approximate; documented here rather than hidden.)
+10. **LOW (auditor)** — `kty` evidence is whitelisted
+    (RSA/EC/oct/OKP, else `unknown`) instead of echoing file text;
+    README's epoch/ISO classification wording and the 1973 bound
+    (1973-03-03, epoch 100 000 000) corrected; the midnight-epoch
+    instant semantics pinned by test. SARIF `executionSuccessful`
+    semantics (unscanned flips it, warnings don't) documented in the
+    README rather than changed — the scan *did* complete when only
+    warnings exist, and the warnings are themselves notifications.
+
+**Accepted as limitations (with reasons):**
+- FP hunt: expiry assignments inside comments/string literals in code
+  (#8), prose quoting an assignment inside a JSON string value (#9),
+  and parser-test openssl captures (#14) still flag. The rule is
+  textual by design (v0.1 doctrine); distinguishing them needs
+  per-language parsing, and the ignore file is the blessed route.
+  Snapshot/golden API responses (#12) and docs samples outside
+  `docs/` (#13) likewise — the v0.1 no-auto-suppress decision stands.
+  `valid_until: 999999999` (a pre-2001 "indefinite" sentinel) flags as
+  2001 — the scanner's claim is literally true of the value.
+- Red team: openssl forms without `GMT` / with full month names, and
+  epoch spellings in scientific/hex/`+`-prefixed form, remain
+  unrecognised (canonical forms only) — precision over recall.
+- Noted for a future version (found by the FP hunt, **outside the
+  locked v0.2 scope**): full ISO datetimes (`"expires":
+  "2020-01-01T00:00:00Z"`) evade the v0.1 ISO rule — the date regex's
+  trailing `\b` fails before `T` — so AWS/HAR-style datetime
+  expirations are missed entirely; and camelCase keys (`ExpiresAt:`)
+  evade the epoch rule, which is snake/kebab-case by design.
+- Doc-file JWK/PEM *warnings* still print even though findings in
+  docs are suppressed+counted (auditor #8): uniform with v0.1's
+  warning behaviour for all scanners; noisy but never silent.
+
+**Re-measured after the fix pass:** tests **109/109**; corpus
+33 cases, planted **19/19**, 0 FP (unchanged); real-world table above
+re-run — every clean tree still 0 findings (own tree: 0 findings,
+1 safe, 3 warnings, 1 suppressed); consumer simulation re-run green
+(exit 2, exactly the 2 planted findings, broken invocation exit 3);
+100 KB single-token file: ~370 s → ~0.00 s; KiCad tree (304 files)
+~9 s.

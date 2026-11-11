@@ -98,6 +98,20 @@ def d(offset_days: int) -> str:
     return (GEN_DATE + timedelta(days=offset_days)).isoformat()
 
 
+def epoch(offset_days: int) -> int:
+    """Epoch-seconds for midnight UTC on GEN_DATE + offset_days."""
+    return int(datetime.combine(
+        GEN_DATE + timedelta(days=offset_days),
+        datetime.min.time()).replace(tzinfo=timezone.utc).timestamp())
+
+
+def openssl_stamp(offset_days: int) -> str:
+    """An openssl-style timestamp (space-padded day) for GEN + offset."""
+    when = GEN_DATE + timedelta(days=offset_days)
+    return (f"{when.strftime('%b')} {when.day:2d} 00:00:00 "
+            f"{when.year} GMT")
+
+
 def main() -> int:
     readme_path = os.path.join(FIXTURES, "README.md")
     readme = None
@@ -170,6 +184,47 @@ def main() -> int:
         "certs/chain.pem": far_pem + far2_pem,
     }, {"description": "clean: chained PEM with two far-future certs",
         "expected_findings": [], "expected_safe": 2, "expected_exit": 0})
+
+    write_case("clean_epoch_safe", {
+        "config/settings.py":
+            f"SESSION_EXPIRES_AT = {epoch(3000)}  # far future\n",
+    }, {"description": "clean (v0.2): epoch expires_at far in the future "
+                        "is safe",
+        "expected_findings": [], "expected_safe": 1, "expected_exit": 0})
+
+    write_case("clean_epoch_traps", {
+        "config/limits.py":
+            "CACHE_TTL = 3600\nSESSION_TTL_SECONDS = 86400\n"
+            "EXPIRY_CHECK_INTERVAL = 300\n",
+        "testdata/auth.json":
+            '{\n  "expires_in": 7200,\n  "exp": 3600,\n'
+            '  "created_at": 1577836800,\n  "updated_at": 1600000000,\n'
+            '  "expires_at": 1767225600000,\n'
+            '  "token_expires_at_ms": 1767225600000\n}\n',
+    }, {"description": "clean (v0.2): epoch FP traps — ttl durations, "
+                        "OAuth expires_in seconds, a sub-plausibility "
+                        "exp value, created_at/updated_at timestamps and "
+                        "millisecond epochs must NOT flag",
+        "expected_findings": [], "expected_safe": 0, "expected_exit": 0})
+
+    write_case("clean_jwk_without_exp", {
+        "keys/jwks.json":
+            '{\n  "keys": [\n'
+            '    {"kty": "RSA", "kid": "sim-a", "use": "sig"},\n'
+            '    {"kty": "EC", "kid": "sim-b", "use": "sig"}\n  ]\n}\n',
+    }, {"description": "clean (v0.2): JWKS whose keys carry no exp field",
+        "expected_findings": [], "expected_safe": 0, "expected_exit": 0})
+
+    write_case("clean_openssl_dates", {
+        "certs/openssl-dates.txt":
+            "notBefore=Jan 15 00:00:00 2025 GMT\n"
+            "notAfter=Jan 15 00:00:00 2049 GMT\n",
+        "certs/inspect.txt":
+            "Validity\n    Not Before: Jan 15 00:00:00 2025 GMT\n",
+    }, {"description": "clean (v0.2): openssl output — a past notBefore "
+                        "is a start date, not an expiry; a 2049 notAfter "
+                        "is safe",
+        "expected_findings": [], "expected_safe": 1, "expected_exit": 0})
 
     # ---- one planted fault per case --------------------------------------
     write_case("fault_cert_expired", {
@@ -244,6 +299,71 @@ def main() -> int:
                               {"kind": "certificate", "status": "expiring"}],
         "expected_safe": 0, "expected_exit": 2})
 
+    write_case("fault_epoch_expired", {
+        "testdata/session.json":
+            '{\n  "user": "fixture-user",\n'
+            '  "expires_at": 1577836800\n}\n',
+    }, {"description": "fault (v0.2): epoch expires_at in the past "
+                        "(2020-01-01)",
+        "expected_findings": [{"kind": "epoch-expiry",
+                               "status": "expired"}],
+        "expected_safe": 0, "expected_exit": 2})
+
+    write_case("fault_epoch_expiring", {
+        "config/app.env": f"TOKEN_EXPIRES_AT={epoch(20)}\n",
+    }, {"description": "fault (v0.2): .env-style epoch expiry 20 days "
+                        "after generation",
+        "expected_findings": [{"kind": "epoch-expiry",
+                               "status": "expiring"}],
+        "expected_safe": 0, "expected_exit": 1})
+
+    write_case("fault_jwk_expired", {
+        "keys/jwks.json":
+            '{\n  "keys": [\n'
+            '    {"kty": "RSA", "kid": "sim-old", "use": "sig",\n'
+            '     "n": "sXchDaQebHnPiGvyDOAT4saGEUetSyo9MKLOoWFsueri",\n'
+            '     "exp": 1577836800},\n'
+            '    {"kty": "EC", "kid": "sim-current", "use": "sig"}\n'
+            '  ]\n}\n',
+    }, {"description": "fault (v0.2): JWKS key with exp in 2020; the "
+                        "second key has no exp and stays silent; reported "
+                        "once as a JWK finding, not double-counted as an "
+                        "epoch finding",
+        "expected_findings": [{"kind": "jwk-expiry", "status": "expired"}],
+        "expected_safe": 0, "expected_exit": 2})
+
+    write_case("fault_jwk_expiring", {
+        "keys/signing.json":
+            '{\n  "kty": "RSA", "kid": "sim-next", "use": "sig",\n'
+            f'  "exp": {epoch(15)}\n}}\n',
+    }, {"description": "fault (v0.2): single JWK object with exp 15 days "
+                        "after generation",
+        "expected_findings": [{"kind": "jwk-expiry",
+                               "status": "expiring"}],
+        "expected_safe": 0, "expected_exit": 1})
+
+    write_case("fault_openssl_expired", {
+        "certs/openssl-dates.txt":
+            "notBefore=Dec 10 00:00:00 2024 GMT\n"
+            "notAfter=Jan 15 23:59:59 2025 GMT\n",
+    }, {"description": "fault (v0.2): committed openssl -dates output "
+                        "with a past notAfter (the notBefore line must "
+                        "not flag)",
+        "expected_findings": [{"kind": "openssl-expiry",
+                               "status": "expired"}],
+        "expected_safe": 0, "expected_exit": 2})
+
+    write_case("fault_openssl_text_expiring", {
+        "certs/inspect.txt":
+            "Certificate:\n    Data:\n        Validity\n"
+            "            Not Before: " + openssl_stamp(-300) + "\n"
+            "            Not After : " + openssl_stamp(30) + "\n",
+    }, {"description": "fault (v0.2): openssl -text Validity block with "
+                        "notAfter 30 days after generation",
+        "expected_findings": [{"kind": "openssl-expiry",
+                               "status": "expiring"}],
+        "expected_safe": 0, "expected_exit": 1})
+
     # ---- edge cases --------------------------------------------------------
     write_case("edge_binary_certlike_bytes", {
         "blob.bin": b"\x00\x01\x02-----BEGIN CERTIFICATE-----\n"
@@ -291,6 +411,16 @@ def main() -> int:
                         "an expired JWT",
         "expected_findings": [{"kind": "jwt", "status": "expired"}],
         "expected_safe": 0, "expected_exit": 2})
+
+    write_case("edge_jwks_malformed", {
+        "keys/jwks.json":
+            '{"keys": [{"kty": "RSA", "kid": "sim-broken", '
+            '"exp": "soon"},\n',
+    }, {"description": "edge (v0.2): file named as JWKS but its JSON is "
+                        "truncated — a warning (the name claims JWKS), "
+                        "no findings, no crash",
+        "expected_findings": [], "expected_safe": 0, "expected_exit": 0,
+        "expected_warnings_min": 1})
 
     print("Done. Corpus expectations are in each case's case.json.")
     return 0

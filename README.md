@@ -26,6 +26,7 @@ That's it — a single file, Python 3.9+, nothing to install.
 ```bash
 python3 expiry_radar.py .                     # text report
 python3 expiry_radar.py . --json              # JSON report
+python3 expiry_radar.py . --sarif             # SARIF 2.1.0 (code scanning)
 python3 expiry_radar.py . --days 30           # warn only within 30 days
 python3 expiry_radar.py . --show-safe         # also list safe artefacts
 python3 expiry_radar.py . --now 2027-01-01    # "what breaks by New Year?"
@@ -70,6 +71,42 @@ python3 expiry_radar.py . --now 2027-01-01    # "what breaks by New Year?"
    `suppressed_in_docs` in the JSON report, never silently dropped.
    This conservatism is deliberate and measured in
    [ANALYSIS.md](ANALYSIS.md).
+4. **Epoch expiry values** *(v0.2)* — numeric epoch-seconds that *are
+   the value* of an expiry-semantic key (`exp`, `expires_at`,
+   `*_EXPIRES_AT`, `valid_until`, `not_after`, `token_expiry`, …) in
+   code, fixtures and `.env`-style files. Classification is by the
+   exact instant (an epoch *is* an instant; the ISO-date rule above
+   instead treats a bare date as valid through its day — a pinned,
+   deliberate divergence). Attribution is the whole rule: durations
+   (`ttl`, `expires_in`), millisecond epochs, and unrelated timestamps
+   (`created_at`, `updated_at`, `iat`) never flag, and implausible
+   values (before epoch 100 000 000 = 1973-03-03, after 2100) are
+   ignored as not-epochs. The bare key `exp` is overloaded in the wild
+   (experience points, "expected"), so it flags only with token
+   context — a sibling `iat`/`sub`/`iss`/`aud` key in the same file;
+   suffixed forms need no context.
+5. **JWK / JWKS `exp`** *(v0.2)* — `exp` fields inside JWK/JWKS-shaped
+   JSON (an object with `kty`, or a `keys` array of such objects),
+   classified like JWT `exp`. The shape must validate first; key
+   material (`n`, `e`, `x`, `y`, `kid`, …) is never printed.
+6. **OpenSSL text output** *(v0.2)* — `notAfter=Dec 10 23:59:59 2027
+   GMT` (`-dates` / `-enddate` form) and `Not After : …` (`-text` form)
+   lines in committed text files, classified like certificate dates.
+   `notBefore` is a start date and never flags.
+
+### SARIF output
+
+`--sarif` emits SARIF 2.1.0 for GitHub code scanning
+(`upload-sarif`). Results are exactly the findings the `--json` report
+lists (plus safe artefacts with `--show-safe`), so the two machine
+formats cross-check result-for-result. Unscanned files are surfaced as
+tool-execution notifications and mark the invocation
+`executionSuccessful: false` — a partial scan never presents as a
+clean pass. Warnings are surfaced as notifications too, but do not
+flip `executionSuccessful` (the scan completed; an artefact was
+skipped with a warning, and the warning itself is the record).
+`--json` and `--sarif` are mutually exclusive (exit 3).
+Exit codes are unchanged in SARIF mode.
 
 Safe artefacts (> window) are counted in the summary but not listed
 unless `--show-safe` is passed. Files over 5 MiB, symlinks, non-regular
@@ -125,8 +162,9 @@ clean again.
   (gitleaks, SkillScan, …).
 - **No signature verification** of certs or JWTs, no chain building, no
   revocation checks.
-- **Date formats:** ISO `YYYY-MM-DD` only. Epoch timestamps, `MM/DD/YYYY`,
-  and natural-language dates are out of scope for v1.
+- **Date formats:** ISO `YYYY-MM-DD`, plus (v0.2) epoch-seconds on
+  expiry keys and openssl `notAfter` text. `MM/DD/YYYY` and
+  natural-language dates remain out of scope.
 - **DER** is recognised only as a whole file (any extension, if the
   file starts with the DER SEQUENCE byte `0x30`), not embedded in other
   binary blobs; binary files are otherwise not text-scanned and are
@@ -136,10 +174,10 @@ clean again.
 
 ```bash
 python3 make_fixtures.py   # regenerate the fixture corpus (needs openssl CLI)
-python3 run_tests.py       # 61 tests, stdlib unittest, zero dependencies
+python3 run_tests.py       # 109 tests, stdlib unittest, zero dependencies
 ```
 
-The corpus comes first in this project: 22 cases under
+The corpus comes first in this project: 33 cases under
 [`fixtures/`](fixtures/) — clean cases that must produce zero findings,
 one planted fault per case, and edge cases (binary blobs, malformed
 PEM/JWT, a 6 MiB file, unicode + spaces in filenames, chained PEMs).

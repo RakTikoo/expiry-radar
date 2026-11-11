@@ -10,6 +10,19 @@ Scans git-tracked files (fallback: a plain directory walk) for:
   3. Hardcoded ISO dates in test / fixture / snapshot / testdata paths, and
      dates sitting as the value of an expiry-like key anywhere — flagging
      dates that are past or within the warning window.
+  4. (v0.2) Epoch-seconds values of expiry-semantic keys (`exp`,
+     `expires_at`, `*_EXPIRES_AT`, `valid_until`, …) in code / fixtures /
+     .env-style files — expiry-key attribution only, exactly like the ISO
+     rule: durations (`ttl`, `expires_in`), millisecond epochs and
+     unrelated timestamps (`created_at`, …) never flag.
+  5. (v0.2) `exp` fields inside JWK / JWKS-shaped JSON (objects carrying
+     `kty`, or a `keys` array of them) — classified like JWT `exp`, with
+     no key material ever printed.
+  6. (v0.2) `notAfter=` / `Not After:` lines in committed openssl text
+     output — classified like certificate dates.
+
+Reports: human text (default), `--json`, and `--sarif` (SARIF 2.1.0 for
+GitHub code scanning; mutually exclusive with `--json`).
 
 Static analysis only: scanned files are read as bytes and never executed,
 imported, or evaluated. Python standard library only. No network, no
@@ -33,10 +46,12 @@ import re
 import stat
 import subprocess
 import sys
+import urllib.parse
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MiB — larger files are listed as unscanned
 DEFAULT_DAYS = 90
@@ -62,8 +77,19 @@ DER_EXTENSIONS = {".der", ".crt", ".cer"}
 # src/readme.py is NOT — a code extension defeats the stem.
 DOC_FILENAMES = {"changelog", "history", "news", "readme", "license",
                  "licence", "authors", "changes", "releasenotes",
-                 "release_notes", "release-notes"}
-DOC_EXTENSIONS_ANY_STEM = {".md", ".rst", ".adoc"}
+                 "release_notes", "release-notes", "notes"}
+DOC_EXTENSIONS_ANY_STEM = {".md", ".rst", ".adoc", ".log"}
+# v0.2 (FP hunt): the exemption's stem list missed the containers
+# historical expiry data actually lives in. A doc stem with a *data*
+# extension (CHANGELOG.json, HISTORY.yaml) is still documentation —
+# code extensions still defeat the stem (CHANGELOG.py scans). A file
+# under a docs/ path part is documentation whatever its extension
+# (docs/token_example.json is a guide sample). Template suffixes
+# (.env.example, *.sample, *.template, *.dist) carry fake values by
+# convention. All of these remain *counted* suppressions, never silent.
+DOC_DATA_EXTENSIONS = {".json", ".yaml", ".yml", ".toml", ".xml"}
+DOC_PATH_PARTS = {"docs", "doc", "documentation"}
+TEMPLATE_SUFFIXES = (".example", ".sample", ".template", ".dist")
 
 FIXTURE_PATH_PARTS = {
     "test", "tests", "testing", "fixture", "fixtures", "testdata",
@@ -355,7 +381,8 @@ def parse_certificate_der(der: bytes) -> CertInfo:
 
 @dataclass
 class Finding:
-    kind: str            # certificate | jwt | fixture-date
+    kind: str            # certificate | jwt | fixture-date |
+                         # epoch-expiry | jwk-expiry | openssl-expiry
     status: str          # expired | expiring | safe
     path: str            # repo-relative, forward slashes
     line: int            # 1-based; 1 for whole-file artefacts
@@ -628,13 +655,20 @@ def _is_fixture_path(rel: str) -> bool:
 
 
 def _is_doc_file(rel: str) -> bool:
-    name = rel.rsplit("/", 1)[-1].lower()
+    parts = [p.lower() for p in rel.split("/")]
+    if any(p in DOC_PATH_PARTS for p in parts[:-1]):
+        return True
+    name = parts[-1]
+    if name.endswith(TEMPLATE_SUFFIXES):
+        return True
     stem, dot, ext = name.rpartition(".")
     if not dot:
         return name in DOC_FILENAMES
     if "." + ext in DOC_EXTENSIONS_ANY_STEM:
         return True
     if "." + ext == ".txt":
+        return stem in DOC_FILENAMES
+    if "." + ext in DOC_DATA_EXTENSIONS:
         return stem in DOC_FILENAMES
     return False
 
@@ -661,13 +695,27 @@ _KV_MASK_RE = re.compile(
     r"([A-Za-z0-9_\-.\"']+\s*[=:]\s*[\"']?)([^\s\"',\}\]]{9,})")
 
 
+_QUOTED_MASK_RE = re.compile(r"([\"'])(?:(?!\1).){13,}?\1")
+_LONG_RUN_MASK_RE = re.compile(r"[A-Za-z0-9+/=_~\-]{24,}")
+
+
 def _mask_evidence(line: str) -> str:
     """Fixture-date evidence is a raw source line and may carry secrets:
     mask JWT-shaped substrings and key=value / key: value values longer
     than 8 chars with ***, then sanitise and cap at 80 chars. Masking
-    happens BEFORE truncation so a long secret is never half-printed."""
-    masked = _JWT_MASK_RE.sub("***", line)
+    happens BEFORE truncation so a long secret is never half-printed.
+    v0.2 hardening (code auditor): the *contents* of quoted strings
+    longer than 12 chars are masked regardless of internal spaces (a
+    space-separated secret in a quoted note leaked), and any remaining
+    standalone run of 24+ token characters is masked (bare tokens).
+    Only the first 2048 chars are masked over: evidence is capped at
+    80 chars, and running the mask regexes over an unbounded line for
+    every finding was quadratic (red team)."""
+    masked = _JWT_MASK_RE.sub("***", line[:2048])
+    masked = _QUOTED_MASK_RE.sub(lambda m: m.group(1) + "***" + m.group(1),
+                                  masked)
     masked = _KV_MASK_RE.sub(lambda m: m.group(1) + "***", masked)
+    masked = _LONG_RUN_MASK_RE.sub("***", masked)
     return _cap(masked, 80)
 
 
@@ -723,6 +771,262 @@ def scan_dates(text: str, rel: str, now, days, include_doc: bool = False):
                 expires=when.strftime("%Y-%m-%d"), days_left=days_left,
                 detail=f"hardcoded date {match.group(0)} in fixture-like "
                        f"context",
+                evidence=evidence,
+            ))
+    return findings
+
+
+# --------------------------------------------------------------------------
+# v0.2 scanners: epoch key values, JWK/JWKS exp, openssl text output
+# --------------------------------------------------------------------------
+
+# An assignment-shaped fragment: KEY (optionally quoted) : or = VALUE,
+# where VALUE is an integer (optionally quoted, optionally a `.0` float
+# spelling). The key and the value are validated separately, in code —
+# the regex only locates candidates, mirroring the house rule that a
+# pattern locates and code decides.
+EPOCH_ASSIGN_RE = re.compile(
+    r"""(?<![A-Za-z0-9_\-])[\"']?([A-Za-z][A-Za-z0-9_\-]{0,63})[\"']?"""
+    r"""\s*[:=]\s*[\"']?(\d{1,19})(?:\.0+)?[\"']?(?![\w.])""")
+# The left-boundary lookbehind + 64-char key cap are load-bearing: an
+# unbounded greedy key class backtracks from every position inside a
+# long unbroken alphanumeric token (hex blobs, data URIs) — quadratic
+# (red team: 16 KB token ≈ 8 s). With both bounds the scan is linear.
+# The terminator (?![\w.]) rejects trailing junk the first version let
+# through: 1577836800abc, 1577836800seconds, 1577836800_000 and the
+# exponent form 1577836800.0e3 (a millisecond-scale value misread as
+# seconds — code auditor).
+# Plausible epoch-seconds window. The lower bound (1973-03-03) rejects
+# durations-in-disguise (ttl=3600, expires_in=7200, small counters); the
+# upper bound (2100-01-01) rejects millisecond epochs (1.7e12) and
+# nanosecond values outright — a 13-digit "epoch" is never seconds.
+EPOCH_MIN = 100_000_000
+EPOCH_MAX = 4_102_444_800
+
+
+def _is_epoch_key(key: str) -> bool:
+    """True iff `key` is expiry-semantic in the epoch sense: its FINAL
+    underscore segments name an expiry bound (`exp`, `expires_at`,
+    `*_EXPIRES_AT`, `valid_until`, `not_after`, `token_expiry`).
+    Trailing segments disqualify (`expiry_check_interval`, `expires_in`
+    — the latter is an OAuth duration), and non-expiry keys
+    (`created_at`, `updated_at`, `ttl`, `iat`) never match."""
+    segs = key.lower().replace("-", "_").split("_")
+    if segs[-1] == "exp":
+        return True
+    if segs[-2:] in (["expires", "at"], ["expire", "at"],
+                     ["valid", "until"], ["valid", "to"],
+                     ["not", "after"]):
+        return True
+    return segs[-1] in ("expires", "expiry")
+
+
+_CLAIM_CONTEXT_RE = re.compile(
+    r"""[\"']?(?:iat|sub|iss|aud)[\"']?\s*[:=]""")
+
+
+def scan_epochs(text: str, rel: str, now, days, claims=None):
+    """Epoch-seconds expiry values, with per-key attribution exactly
+    like the ISO-date rule: a number is flagged only if it IS the value
+    of an expiry-semantic key on its line, and only inside the plausible
+    epoch-seconds window (see EPOCH_MIN/EPOCH_MAX).
+
+    Two precision guards from the v0.2 adversarial review:
+    * the bare key `exp` is heavily overloaded in the wild (game
+      experience points, "expected" in tests, experiment ids), so a
+      bare `exp` flags only with token context — a sibling claim key
+      (`iat`/`sub`/`iss`/`aud`) somewhere in the same file. Suffixed
+      forms (`session_exp`, `expires_at`, …) are unambiguous and need
+      no context.
+    * `claims` is a Counter of (line, value) occurrences already
+      reported by the JWK scanner; only those exact occurrences are
+      skipped, so an unrelated epoch value on the same line (minified
+      JSON) is still reported — whole-line exclusion silently dropped
+      it (red team / code auditor)."""
+    findings = []
+    claims = claims if claims is not None else {}
+    has_claim_context = bool(_CLAIM_CONTEXT_RE.search(text))
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        evidence = None
+        for match in EPOCH_ASSIGN_RE.finditer(line):
+            key = match.group(1)
+            if not _is_epoch_key(key):
+                continue
+            value = int(match.group(2))
+            if not (EPOCH_MIN <= value <= EPOCH_MAX):
+                continue
+            claim_key = (lineno, value)
+            if claims.get(claim_key):
+                claims[claim_key] -= 1
+                continue
+            if key.lower() == "exp" and not has_claim_context:
+                continue
+            if evidence is None:
+                evidence = _mask_evidence(line.strip())
+            expiry = datetime.fromtimestamp(value, tz=timezone.utc)
+            status, days_left = classify(expiry, now, days)
+            findings.append(Finding(
+                kind="epoch-expiry", status=status, path=rel, line=lineno,
+                expires=expiry.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                days_left=days_left,
+                detail=f"epoch expiry value of key '{_cap(key, 60)}'",
+                evidence=evidence,
+            ))
+    return findings
+
+
+_JWK_KTY_KNOWN = {"RSA", "EC", "oct", "OKP"}
+_EXP_CANDIDATE_RE = re.compile(r'"exp"\s*:\s*"?(\d+)"?')
+
+
+def scan_jwks(text: str, rel: str, now, days, warnings):
+    """`exp` fields inside JWK/JWKS-shaped JSON: a top-level object with
+    a `keys` array whose members carry `kty`, or a single object with
+    `kty`. The shape must validate before anything is believed (the
+    JWT rule's discipline). Key material (n/e/x/y/…) is never read into
+    a finding — only `exp` and `kty` are used. Malformed candidates are
+    silent unless the filename itself claims to be a JWKS file.
+
+    Returns (findings, claims): claims is a list of (line, value)
+    occurrences this scanner has reported, for the epoch scanner's
+    occurrence-level dedupe.
+
+    v0.2 fix pass: `exp` must sit in the same plausibility window as
+    the epoch rule — a JWK `exp` of 65537 is the RSA public exponent in
+    some export formats, and 0 / -1 are "no expiry" sentinels; the
+    first version flagged all of them as 1970 expiries (FP hunt).
+    Digit-string exps ("1577836800", a sloppy-exporter shape) are
+    accepted as values. Unicode-escaped spellings (\\u0065xp) are
+    found because the gates below admit any brace-led document that
+    mentions the markers *or* contains escapes, and json.loads does
+    the decoding (red team)."""
+    findings = []
+    claims = []
+    stripped = text.lstrip("\ufeff \t\r\n")
+    if not stripped.startswith("{"):
+        return findings, claims
+    if not ('"kty"' in text or '"keys"' in text or '"exp"' in text
+            or "\\u" in text):
+        return findings, claims
+    raw = text.encode("utf-8", errors="replace")
+    if _json_exceeds_depth(raw, MAX_JWT_JSON_DEPTH):
+        warnings.append(f"{rel}: JWKS with deeply nested JSON — skipped")
+        return findings, claims
+    try:
+        doc = json.loads(text)
+    except (ValueError, RecursionError):
+        name = rel.rsplit("/", 1)[-1].lower()
+        if "jwks" in name:
+            warnings.append(f"{rel}: file named as JWKS but its JSON "
+                            f"does not parse — not scanned as JWKS")
+        return findings, claims
+    if not isinstance(doc, dict):
+        return findings, claims
+    keys = []
+    if isinstance(doc.get("keys"), list):
+        keys = [k for k in doc["keys"]
+                if isinstance(k, dict) and "kty" in k]
+    elif "kty" in doc:
+        keys = [doc]
+    if not keys:
+        return findings, claims
+    # Line attribution (code auditor / red team): one pass collects the
+    # (line, value) candidates in document order; each key consumes the
+    # first unconsumed candidate with its own value. The first version
+    # substring-searched per key — duplicate values, longer values with
+    # a shared prefix, and the value appearing in a `kid` all resolved
+    # to the wrong line, which then also defeated the epoch dedupe.
+    lines = text.splitlines()
+    candidates = []
+    for lineno, line in enumerate(lines, start=1):
+        for cand in _EXP_CANDIDATE_RE.finditer(line):
+            candidates.append([lineno, int(cand.group(1)), False])
+
+    def _claim_line(value: int) -> int:
+        for cand in candidates:
+            if not cand[2] and cand[1] == value:
+                cand[2] = True
+                return cand[0]
+        return 1  # e.g. unicode-escaped key spelling: value is real,
+        # its line is not literally findable — finding stands, line is
+        # the documented fallback.
+
+    warned = set()
+    for key in keys:
+        if "exp" not in key:
+            continue
+        exp = key["exp"]
+        if isinstance(exp, str) and exp.strip().lstrip("+").isdigit():
+            exp = int(exp.strip())  # sloppy-exporter digit string
+        bad = None
+        if isinstance(exp, bool) or not isinstance(exp, (int, float)):
+            bad = "non-numeric"
+        elif isinstance(exp, float) and not exp.is_integer():
+            bad = "non-integer"
+        if bad:
+            if bad not in warned:
+                warnings.append(f"{rel}: JWK with {bad} exp — skipped")
+                warned.add(bad)
+            continue
+        if not (EPOCH_MIN <= exp <= EPOCH_MAX):
+            continue  # implausible as an expiry: RSA exponent (65537),
+            # no-expiry sentinels (0, -1), ms-scale and absurd values
+            # are silently not expiries — the epoch rule's discipline.
+        line = _claim_line(int(exp))
+        claims.append((line, int(exp)))
+        expiry = datetime.fromtimestamp(exp, tz=timezone.utc)
+        status, days_left = classify(expiry, now, days)
+        kty = str(key.get("kty", ""))
+        findings.append(Finding(
+            kind="jwk-expiry", status=status, path=rel, line=line,
+            expires=expiry.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            days_left=days_left,
+            detail="JWK exp claim",
+            evidence=f"JWK (kty={kty if kty in _JWK_KTY_KNOWN else 'unknown'})",
+        ))
+    return findings, claims
+
+
+OPENSSL_MONTHS = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+# The two canonical committed-output shapes: `openssl x509 -dates` /
+# `-enddate` prints `notAfter=Dec 10 23:59:59 2027 GMT`; `-text` prints
+# `Not After : Dec 10 …GMT`. `notBefore` / `Not Before` never match —
+# a start date is not an expiry. The full timestamp + GMT is required,
+# so prose mentions do not match.
+OPENSSL_NOTAFTER_RE = re.compile(
+    r"(?:notAfter\s*=|Not\s+After\s*:)\s*"
+    r"([A-Za-z]{3})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})\s+(\d{4})\s+GMT",
+    re.IGNORECASE)
+
+
+def scan_openssl_text(text: str, rel: str, now, days):
+    """Certificate `notAfter` lines in committed openssl output."""
+    findings = []
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        evidence = None
+        for match in OPENSSL_NOTAFTER_RE.finditer(line):
+            month = OPENSSL_MONTHS.get(match.group(1).lower())
+            if month is None:
+                continue
+            try:
+                expiry = datetime(
+                    int(match.group(6)), month, int(match.group(2)),
+                    int(match.group(3)), int(match.group(4)),
+                    int(match.group(5)), tzinfo=timezone.utc)
+            except ValueError:
+                continue  # e.g. Feb 30 — not a real date
+            if evidence is None:
+                evidence = _mask_evidence(line.strip())
+            status, days_left = classify(expiry, now, days)
+            findings.append(Finding(
+                kind="openssl-expiry", status=status, path=rel,
+                line=lineno,
+                expires=expiry.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                days_left=days_left,
+                detail="certificate notAfter in committed openssl output",
                 evidence=evidence,
             ))
     return findings
@@ -971,6 +1275,13 @@ def scan(root: str, now: datetime, days: int = DEFAULT_DAYS,
         text = data.decode("utf-8", errors="replace")
         file_findings.extend(scan_dates(text, rel, now, days,
                                         include_doc=True))
+        jwk_findings, jwk_claims = scan_jwks(
+            text, rel, now, days, result.warnings)
+        file_findings.extend(jwk_findings)
+        file_findings.extend(scan_epochs(
+            text, rel, now, days,
+            claims=Counter(jwk_claims)))
+        file_findings.extend(scan_openssl_text(text, rel, now, days))
         if _is_doc_file(rel):
             # Doc exemption applies to certs/JWTs/dates alike — but the
             # suppression is counted, never silent.
@@ -1059,6 +1370,133 @@ def to_json_dict(result: ScanResult, show_safe: bool = False) -> dict:
     }
 
 
+SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
+_SARIF_KIND_TEXT = {
+    "certificate": "X.509 certificate in the repository expires or has "
+                   "expired (notAfter)",
+    "jwt": "committed JWT whose exp claim is past or within the "
+           "warning window",
+    "fixture-date": "hardcoded ISO expiry date in a fixture-like "
+                    "context, past or within the warning window",
+    "epoch-expiry": "epoch-seconds value of an expiry-semantic key, "
+                    "past or within the warning window",
+    "jwk-expiry": "JWK/JWKS exp field, past or within the warning "
+                  "window",
+    "openssl-expiry": "certificate notAfter recorded in committed "
+                      "openssl output, past or within the warning window",
+}
+
+
+def _sarif_uri(rel_path) -> str:
+    # quote_from_bytes over the filesystem encoding: a legal but
+    # non-UTF-8 filename must percent-encode, never crash the document.
+    rel = str(rel_path).replace(os.sep, "/")
+    return urllib.parse.quote_from_bytes(os.fsencode(rel), safe="/")
+
+
+def render_sarif(result: ScanResult, show_safe: bool = False) -> dict:
+    """SARIF 2.1.0 rendering of a scan. Results are exactly the findings
+    the JSON report lists (plus safe ones with --show-safe), so the two
+    machine formats can be cross-checked result-for-result. Unscanned
+    files are surfaced as tool-execution notifications and flip the
+    invocation's executionSuccessful to false — a partial scan never
+    presents as a clean pass."""
+    shown = result.expired + result.expiring + \
+        (result.safe if show_safe else [])
+    kinds = sorted(set(_SARIF_KIND_TEXT) | {f.kind for f in shown})
+    rules = [{
+        "id": kind,
+        "name": kind,
+        "shortDescription": {"text": _SARIF_KIND_TEXT.get(
+            kind, f"expiry finding of kind {kind}")},
+        "fullDescription": {"text": _SARIF_KIND_TEXT.get(
+            kind, f"expiry finding of kind {kind}")},
+        "properties": {"precision": "high"},
+    } for kind in kinds]
+    if result.unscanned:
+        rules.append({
+            "id": "unscanned-file",
+            "name": "unscanned-file",
+            "shortDescription": {
+                "text": "file was not scanned (size, binary, symlink, "
+                        "ignore rule, …) — the scan is incomplete"},
+            "fullDescription": {
+                "text": "file was not scanned (size, binary, symlink, "
+                        "ignore rule, …) — the scan is incomplete"},
+        })
+    if result.warnings:
+        rules.append({
+            "id": "scan-warning",
+            "name": "scan-warning",
+            "shortDescription": {
+                "text": "scanner warning: an artefact looked broken or "
+                        "unparseable and was skipped with a warning"},
+            "fullDescription": {
+                "text": "scanner warning: an artefact looked broken or "
+                        "unparseable and was skipped with a warning"},
+        })
+    level = {"expired": "error", "expiring": "warning", "safe": "note"}
+    results = [{
+        "ruleId": f.kind,
+        "level": level[f.status],
+        "message": {"text": _sanitize(
+            f"{f.kind} {f.status}: expires {f.expires} "
+            f"({f.days_left:+d}d) — {f.detail}")},
+        "locations": [{
+            "physicalLocation": {
+                "artifactLocation": {"uri": _sarif_uri(f.path)},
+                "region": {"startLine": max(1, int(f.line))},
+            },
+        }],
+        "properties": {
+            "kind": f.kind, "status": f.status, "expires": f.expires,
+            "daysLeft": f.days_left, "evidence": _sanitize(f.evidence),
+        },
+    } for f in shown]
+    notifications = [{
+        "level": "error",
+        "message": {"text": _sanitize(
+            f"unscanned: {u['path']} — {u['reason']}")},
+        "associatedRule": {"id": "unscanned-file"},
+        "locations": [{
+            "physicalLocation": {
+                "artifactLocation": {"uri": _sarif_uri(u["path"])},
+                "region": {"startLine": 1},
+            },
+        }],
+        "properties": {"path": u["path"], "reason": u["reason"]},
+    } for u in result.unscanned]
+    notifications += [{
+        "level": "warning",
+        "message": {"text": _sanitize(w)},
+        "associatedRule": {"id": "scan-warning"},
+    } for w in result.warnings]
+    run = {
+        "tool": {"driver": {
+            "name": "Expiry Radar",
+            "version": __version__,
+            "semanticVersion": __version__,
+            "informationUri": "https://github.com/RakTikoo/expiry-radar",
+            "rules": rules,
+        }},
+        "invocations": [{
+            "executionSuccessful": not result.unscanned,
+            "toolExecutionNotifications": notifications,
+        }],
+        "results": results,
+        "properties": {
+            "filesScanned": result.files_scanned,
+            "fileSource": result.source,
+            "suppressedInDocs": result.suppressed_in_docs,
+            "unscannedCount": len(result.unscanned),
+            "warningsCount": len(result.warnings),
+            "warningWindowDays": result.days,
+            "exitCode": result.exit_code(),
+        },
+    }
+    return {"$schema": SARIF_SCHEMA, "version": "2.1.0", "runs": [run]}
+
+
 # --------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------
@@ -1091,6 +1529,10 @@ def main(argv=None) -> int:
                         help="repo / directory to scan (default: .)")
     parser.add_argument("--json", action="store_true",
                         help="emit a JSON report instead of text")
+    parser.add_argument("--sarif", action="store_true",
+                        help="emit a SARIF 2.1.0 report (for GitHub code "
+                             "scanning) instead of text; mutually "
+                             "exclusive with --json")
     parser.add_argument("--show-safe", action="store_true",
                         help="also list safe (>window) artefacts")
     parser.add_argument("--days", type=int, default=DEFAULT_DAYS,
@@ -1102,6 +1544,9 @@ def main(argv=None) -> int:
                         help="skip files larger than this many bytes "
                              "(they are reported as unscanned)")
     args = parser.parse_args(argv)
+    if args.json and args.sarif:
+        parser.error("--json and --sarif are mutually exclusive "
+                     "output modes")
     if args.days < 0:
         parser.error("--days must be >= 0")
     if args.max_file_size < 0:
@@ -1112,7 +1557,10 @@ def main(argv=None) -> int:
     now = args.now or datetime.now(timezone.utc)
     result = scan(args.path, now=now, days=args.days,
                   max_file_size=args.max_file_size)
-    if args.json:
+    if args.sarif:
+        print(json.dumps(render_sarif(result, show_safe=args.show_safe),
+                         indent=2, ensure_ascii=False))
+    elif args.json:
         print(json.dumps(to_json_dict(result, show_safe=args.show_safe),
                          indent=2, ensure_ascii=False))
     else:

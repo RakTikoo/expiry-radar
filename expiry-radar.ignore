@@ -7,3 +7,7 @@
 fixtures/
 tests/
 make_fixtures.py
+# (v0.2) the consumer simulation's repo deliberately plants an expiring
+# cert + expired JWT; its detection is proven by the sim evidence, not
+# by whole-repo dogfood runs.
+consumer-sim/
