@@ -125,7 +125,11 @@ KEY_VALUE_RE = re.compile(
     r"\s*[\"']?\s*[:=]\s*[\"']?",
     re.IGNORECASE,
 )
-ISO_DATE_RE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
+ISO_DATE_RE = re.compile(
+    r"\b(\d{4})-(\d{2})-(\d{2})"
+    r"(?:(T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):?[0-5]\d))"
+    r"(?![\w:.+\-])|(?![Tt])\b)"
+)
 PEM_RE = re.compile(
     rb"-----BEGIN CERTIFICATE-----([A-Za-z0-9+/=\s]+?)-----END CERTIFICATE-----"
 )
@@ -758,17 +762,26 @@ def scan_dates(text: str, rel: str, now, days, include_doc: bool = False):
                     and 1 <= day <= 31):
                 continue
             try:
-                when = datetime(year, month, day, tzinfo=timezone.utc)
+                if match.group(4):
+                    when = datetime.fromisoformat(
+                        match.group(0).replace("Z", "+00:00")
+                    ).astimezone(timezone.utc)
+                else:
+                    when = datetime(year, month, day, tzinfo=timezone.utc)
             except ValueError:
-                continue  # e.g. 2026-02-30 — not a real date
-            # A bare date is valid *through* that day, so its expiry
-            # moment is the end of the day; days_left is date-to-date.
-            status, _ = classify(
-                when + timedelta(days=1) - timedelta(seconds=1), now, days)
-            days_left = (when.date() - today).days
+                continue  # Invalid date, clock time or UTC offset.
+            if match.group(4):
+                status, days_left = classify(when, now, days)
+                expires = when.isoformat()
+            else:
+                # Bare dates remain valid through the whole calendar day.
+                status, _ = classify(
+                    when + timedelta(days=1) - timedelta(seconds=1), now, days)
+                days_left = (when.date() - today).days
+                expires = when.strftime("%Y-%m-%d")
             findings.append(Finding(
                 kind="fixture-date", status=status, path=rel, line=lineno,
-                expires=when.strftime("%Y-%m-%d"), days_left=days_left,
+                expires=expires, days_left=days_left,
                 detail=f"hardcoded date {match.group(0)} in fixture-like "
                        f"context",
                 evidence=evidence,

@@ -688,12 +688,13 @@ New classes produced **0 false positives on every clean tree scanned**.
 - Red team: openssl forms without `GMT` / with full month names, and
   epoch spellings in scientific/hex/`+`-prefixed form, remain
   unrecognised (canonical forms only) — precision over recall.
-- Noted for a future version (found by the FP hunt, **outside the
-  locked v0.2 scope**): full ISO datetimes (`"expires":
-  "2020-01-01T00:00:00Z"`) evade the v0.1 ISO rule — the date regex's
-  trailing `\b` fails before `T` — so AWS/HAR-style datetime
-  expirations are missed entirely; and camelCase keys (`ExpiresAt:`)
-  evade the epoch rule, which is snake/kebab-case by design.
+- Full ISO datetimes with seconds and an explicit `Z` or numeric UTC offset
+  are now recognised under the same per-key/fixture attribution rules (#1).
+  They expire at the stated instant, normalised to UTC; plain dates retain
+  their end-of-day convention. Unzoned and malformed datetimes are not
+  reinterpreted as bare dates. New corpus cases cover expired/expiring
+  datetimes and unrelated log/build timestamps. CamelCase keys (`ExpiresAt:`)
+  still evade the epoch rule, which is snake/kebab-case by design.
 - Doc-file JWK/PEM *warnings* still print even though findings in
   docs are suppressed+counted (auditor #8): uniform with v0.1's
   warning behaviour for all scanners; noisy but never silent.
