@@ -1,0 +1,6 @@
+{
+  "keys": [
+    {"kty": "RSA", "kid": "sim-a", "use": "sig"},
+    {"kty": "EC", "kid": "sim-b", "use": "sig"}
+  ]
+}
