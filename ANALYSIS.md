@@ -252,11 +252,19 @@ the 61-file own repo in ~2 s. Fine for CI/weekly use; not yet optimised
 - `.github/workflows/tests.yml` — this repo's own CI: regenerate
   fixtures, run the 61 tests, and self-scan one fault case asserting
   exit code 2.
-- **Not done / not verified:** the Action and example workflow are
-  written but *not executed on GitHub* (local-only build under the
-  H-1B gate; no repo exists yet). YAML is structured per GitHub's
-  documented composite-action and `gh issue` usage but must be smoke-
-  tested on a real repo before any launch claim.
+- **Not done / not verified (at v0.1 build time):** the Action and
+  example workflow are written but *not executed on GitHub*
+  (local-only build under the H-1B gate; no repo exists yet). YAML is
+  structured per GitHub's documented composite-action and `gh issue`
+  usage but must be smoke-tested on a real repo before any launch
+  claim.
+  **Superseded 2026-11-11:** both have since been executed on GitHub —
+  the example workflow's living-issue lifecycle was proven live in
+  https://github.com/RakTikoo/expiry-radar-dogfood (issue #1 opened →
+  edited in place → commented-and-closed across three real runs), and
+  the published Action reference `uses: RakTikoo/expiry-radar@v0.2`
+  was smoke-run successfully (tag resolved to the v0.2 head; clean
+  scan, exit 0). See the README's "Proven live" section.
 
 ## 8. Expansion ladder (not built)
 
@@ -438,7 +446,8 @@ tracking issues; the issue search is **by label `expiry-radar`** with
 `--limit 1000` (was title-match at `--limit 100`), the label is
 created idempotently, and created issues carry it. YAML parses;
 still **untested on GitHub** (local-only build under the H-1B gate),
-and the file says so in its header.
+and the file says so in its header. *(Superseded 2026-11-11: proven
+live — see the banner at the v0.2 section below.)*
 
 ### Re-measured numbers (fix pass, 2026-11-10)
 
@@ -487,6 +496,19 @@ as specified, on the scanner itself.
   tool's threat model (local repos, CI checkouts).
 
 ## v0.2 (built 2026-11-10, unreleased — local tree only)
+
+> **Superseded 2026-11-11 — read this section as the build-time
+> record.** v0.2 was pushed and released the same day it was built:
+> tag **v0.2** → commit `0b91492` (v0.1 → `0244682`), both GitHub
+> releases published, CI green. The Action-proof this section calls
+> "preparation" is done: the living-issue lifecycle ran live in
+> https://github.com/RakTikoo/expiry-radar-dogfood (issue #1 opened →
+> edited in place → commented-and-closed), and
+> `uses: RakTikoo/expiry-radar@v0.2` was smoke-run from the tag.
+> Every "unreleased / no tag, no push / untested on GitHub / proof
+> still requires the tag" statement below — including the consumer-sim
+> paragraph — describes the state *before* the approved push, and the
+> README's "Proven live" section is the current truth.
 
 Built in `expiry-radar-v02/` from the pushed v0.1 tree (which is
 untouched). Scope, per the approved v0.2 wave: SARIF output, three new

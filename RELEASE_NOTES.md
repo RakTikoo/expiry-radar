@@ -1,24 +1,26 @@
-# Release notes & tagging checklist — DRAFT, NOT RELEASED
+# Release notes & tagging checklist — RELEASED (v0.1 + v0.2)
 
-**Status: preparation only.** No tag has been cut, no release published,
-nothing pushed. Everything below takes effect only when Rakshit
-approves the push of the v0.2 tree and the tagging, in that order.
+**Status: released record.** The push Rakshit approved was executed on
+2026-11-10: tags **v0.1** (→ commit `0244682`) and **v0.2** (→ commit
+`0b91492`) were cut and both GitHub releases published; step 6, the
+live dogfood proof, completed 2026-11-11. The checklist below is kept
+as the record of how the release was executed.
 H-1B gate applies: no launch, advertising or monetisation follows from
 these notes.
 
-## Tagging checklist (run in this order, only on approval)
+## Tagging checklist (executed 2026-11-10, in this order)
 
-1. Push the verified v0.2 tree to `RakTikoo/expiry-radar` (web-upload
+1. ✅ Push the verified v0.2 tree to `RakTikoo/expiry-radar` (web-upload
    method, stored-bytes verification, CI check — the house protocol).
-2. Confirm CI is green on the pushed head.
-3. Tag the **current pushed v0.1 head** (commit `0244682`, the JWT
+2. ✅ Confirm CI is green on the pushed head.
+3. ✅ Tag the **current pushed v0.1 head** (commit `0244682`, the JWT
    depth-guard fix on top of the original 64-file push) as **v0.1**:
    `git tag v0.1 0244682` — this retroactively marks the release that
    has been live since 2026-11-10, so consumers who pinned nothing can
    still reference the exact v0.1 code.
-4. Tag the pushed v0.2 head as **v0.2** and create the GitHub releases
+4. ✅ Tag the pushed v0.2 head as **v0.2** and create the GitHub releases
    from the notes below (v0.1 release first, then v0.2).
-5. Verify both tags resolve on the repo page and that
+5. ✅ Verify both tags resolve on the repo page and that
    `uses: RakTikoo/expiry-radar@v0.2` is the form the README documents.
 6. Only after the tag exists: the Action-proof step — install the
    Action + weekly workflow in one of our own repos and watch the
@@ -31,7 +33,7 @@ these notes.
    on run 3 after the artefacts were fixed
    (https://github.com/RakTikoo/expiry-radar-dogfood/issues/1).
 
-## Draft release notes — v0.1 (2026-11-10)
+## Release notes — v0.1 (2026-11-10, as published)
 
 First public release.
 
@@ -48,7 +50,7 @@ First public release.
   deeply nested token payloads warn-and-skip identically on every
   Python version.
 
-## Draft release notes — v0.2 (unreleased)
+## Release notes — v0.2 (2026-11-10, as published)
 
 - **SARIF output** (`--sarif`): SARIF 2.1.0 for GitHub code scanning.
   Results cross-check 1:1 against the `--json` findings; unscanned
