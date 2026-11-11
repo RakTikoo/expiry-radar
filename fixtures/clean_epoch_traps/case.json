@@ -1,0 +1,8 @@
+{
+  "description": "clean (v0.2): epoch FP traps \u2014 ttl durations, OAuth expires_in seconds, a sub-plausibility exp value, created_at/updated_at timestamps and millisecond epochs must NOT flag",
+  "expected_findings": [],
+  "expected_safe": 0,
+  "expected_exit": 0,
+  "now": "2026-11-11",
+  "days": 90
+}
