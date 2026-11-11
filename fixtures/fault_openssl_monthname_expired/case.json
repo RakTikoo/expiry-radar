@@ -1,0 +1,13 @@
+{
+  "description": "fault: committed openssl -dates output with full month names and a past notAfter (the full-month notBefore line must not flag)",
+  "expected_findings": [
+    {
+      "kind": "openssl-expiry",
+      "status": "expired"
+    }
+  ],
+  "expected_safe": 0,
+  "expected_exit": 2,
+  "now": "2026-11-11",
+  "days": 90
+}

@@ -1,0 +1,13 @@
+{
+  "description": "fault: committed openssl -dates output with a non-GMT zone abbreviation (EST) and a past notAfter",
+  "expected_findings": [
+    {
+      "kind": "openssl-expiry",
+      "status": "expired"
+    }
+  ],
+  "expected_safe": 0,
+  "expected_exit": 2,
+  "now": "2026-11-11",
+  "days": 90
+}

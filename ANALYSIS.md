@@ -550,7 +550,9 @@ simulation — no tag, no push, nothing run on GitHub).
   epoch scan, so a JWKS `exp` is reported once, as a JWK finding.
 - **OpenSSL text output** (`openssl-expiry`) — `notAfter=…` (the
   `-dates`/`-enddate` form) and `Not After : …` (the `-text` form),
-  full timestamp + `GMT` required. `notBefore` never matches.
+  full timestamp + a recognised zone (`GMT`/`UTC`, a common
+  abbreviation, or a numeric offset) required; month names may be
+  abbreviated or full. `notBefore` never matches.
 
 ### Corpus (regenerated, relative-date deterministic as before)
 
@@ -606,8 +608,9 @@ New classes produced **0 false positives on every clean tree scanned**.
   `"exp"` before parsing (a cheap gate); a JWKS document using
   single-quoted or otherwise non-JSON syntax is out of scope — it is
   not JSON.
-- OpenSSL output without the `GMT` suffix (localised openssl output)
-  is not recognised.
+- OpenSSL output whose zone is not `GMT`/`UTC`, one of the known
+  abbreviations, or a numeric offset is not recognised; neither is
+  localised openssl output (non-English month names).
 - SARIF results mirror the JSON findings list; safe artefacts appear
   only with `--show-safe`, exactly as in JSON mode.
 

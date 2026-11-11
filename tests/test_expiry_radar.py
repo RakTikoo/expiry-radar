@@ -987,6 +987,29 @@ class TestOpensslExpiry(unittest.TestCase):
         self.assertEqual(
             self.scan_text("notAfter=Xyz 10 00:00:00 2025 GMT\n"), [])
 
+    def test_full_month_name(self):
+        got = self.scan_text("notAfter=January 15 23:59:59 2025 GMT\n")
+        self.assertEqual([(f.kind, f.status) for f in got],
+                         [("openssl-expiry", "expired")])
+        self.assertEqual(got[0].expires, "2025-01-15T23:59:59Z")
+
+    def test_named_zone_converted_to_utc(self):
+        got = self.scan_text("    Not After : December 25 00:00:00 2026 PST\n")
+        self.assertEqual([f.status for f in got], ["expiring"])
+        self.assertEqual(got[0].expires, "2026-12-25T08:00:00Z")
+
+    def test_numeric_offset_converted_to_utc(self):
+        got = self.scan_text("notAfter=Dec 25 05:30:00 2026 +0530\n")
+        self.assertEqual(got[0].expires, "2026-12-25T00:00:00Z")
+
+    def test_unknown_zone_skipped(self):
+        self.assertEqual(
+            self.scan_text("notAfter=Jan 15 23:59:59 2025 XYZ\n"), [])
+
+    def test_missing_zone_skipped(self):
+        self.assertEqual(
+            self.scan_text("notAfter=Jan 15 23:59:59 2025\n"), [])
+
 
 class TestSarif(unittest.TestCase):
     """v0.2: --sarif output is valid SARIF 2.1.0 and cross-checks
