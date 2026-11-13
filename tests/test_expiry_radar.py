@@ -1244,5 +1244,25 @@ class TestV02FixPass(unittest.TestCase):
                 self.assertIn(note["associatedRule"]["id"], rule_ids)
 
 
+class IsoDatetimeExpiryTests(unittest.TestCase):
+    def test_offsets_are_instants_not_end_of_day(self):
+        now = datetime(2026, 11, 11, tzinfo=timezone.utc)
+        for value, status in [
+                ("2026-11-11T00:30:00+01:00", "expired"),
+                ("2026-11-10T23:30:00-01:00", "expiring"),
+                ("2026-11-11T00:00:00Z", "expiring")]:
+            with self.subTest(value=value):
+                findings = er.scan_dates('expires="' + value + '"', "config.py", now, 90)
+                self.assertEqual(len(findings), 1)
+                self.assertEqual(findings[0].status, status)
+
+    def test_invalid_or_unzoned_datetime_is_not_truncated_to_date(self):
+        for value in ["2020-01-01T25:00:00Z", "2020-01-01T00:00:00+01:99",
+                      "2020-01-01T00:00:00", "2020-02-30T00:00:00Z"]:
+            with self.subTest(value=value):
+                self.assertEqual(er.scan_dates('expires="' + value + '"',
+                                               "config.py", NOW, 90), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

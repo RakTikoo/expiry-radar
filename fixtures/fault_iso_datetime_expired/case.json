@@ -1,0 +1,17 @@
+{
+  "description": "fault_iso_datetime_expired",
+  "expected_findings": [
+    {
+      "kind": "fixture-date",
+      "status": "expired"
+    },
+    {
+      "kind": "fixture-date",
+      "status": "expired"
+    }
+  ],
+  "expected_safe": 0,
+  "expected_exit": 2,
+  "now": "2026-11-11",
+  "days": 90
+}

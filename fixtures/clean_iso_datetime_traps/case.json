@@ -1,0 +1,8 @@
+{
+  "description": "clean_iso_datetime_traps",
+  "expected_findings": [],
+  "expected_safe": 0,
+  "expected_exit": 0,
+  "now": "2026-11-11",
+  "days": 90
+}
