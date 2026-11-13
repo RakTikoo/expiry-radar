@@ -2,6 +2,20 @@
 
 Build date: 2026-11-10. Status: local spike build, **not published**
 (no repo created, nothing pushed — per the project's H-1B gate).
+
+*Superseded 2026-11-13: this repo has since been pushed and released —
+RakTikoo/expiry-radar is public, with tags `v0.1` at `0244682` and
+`v0.2` at `0b91492` and GitHub releases for both, CI green on the
+pushed v0.2 head, and a live dogfood proof in
+RakTikoo/expiry-radar-dogfood (the published Action
+`uses: RakTikoo/expiry-radar@v0.2` smoke-run from the tag, and the
+living-issue lifecycle — issue #1 opened → edited in place →
+commented-and-closed — executed across real runs). The status line
+above and any "local only / not published / no tag / not yet run"
+statements in the dated sections below are build-time records from
+2026-11-10 and no longer describe the current state; see README.md
+and RELEASE_NOTES.md for the current record.*
+
 All measurements below were produced by running the shipped code on this
 machine on 2026-11-10 with `--now 2026-11-10` unless stated otherwise.
 
