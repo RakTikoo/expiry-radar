@@ -277,6 +277,48 @@ def main() -> int:
                               {"kind": "fixture-date", "status": "expiring"}],
         "expected_safe": 0, "expected_exit": 1})
 
+    # Fixed-clock ISO datetime regressions survive full corpus regeneration.
+    write_case("fault_iso_datetime_expired", {
+        "settings.json": (
+            '{"valid_until":"2020-01-01T00:00:00Z"}\n'
+            '{"expires":"2020-01-01T03:00:00+03:00"}\n'
+        ),
+    }, {'description': 'fault_iso_datetime_expired',
+     'expected_findings': [{'kind': 'fixture-date', 'status': 'expired'},
+                           {'kind': 'fixture-date', 'status': 'expired'}],
+     'expected_safe': 0,
+     'expected_exit': 2,
+     'now': '2026-11-11',
+     'days': 90})
+
+    write_case("fault_iso_datetime_expiring", {
+        "settings.json": (
+            '{"valid_until":"2026-11-20T00:00:00Z"}\n'
+            '{"expires":"2026-11-20T01:30:00-05:30"}\n'
+        ),
+    }, {'description': 'fault_iso_datetime_expiring',
+     'expected_findings': [{'kind': 'fixture-date', 'status': 'expiring'},
+                           {'kind': 'fixture-date', 'status': 'expiring'}],
+     'expected_safe': 0,
+     'expected_exit': 1,
+     'now': '2026-11-11',
+     'days': 90})
+
+    write_case("clean_iso_datetime_traps", {
+        "settings.json": (
+            '{"created_at":"2020-01-01T00:00:00Z"}\n'
+            '{"build_timestamp":"2020-01-01T00:00:00+02:00"}\n'
+            '{"expires":"not a date", "created_at":"2020-01-01T00:00:00Z"}\n'
+            '{"expires":"2020-02-30T00:00:00Z"}\n'
+            '{"expires":"2020-01-01T25:00:00Z"}\n'
+        ),
+    }, {'description': 'clean_iso_datetime_traps',
+     'expected_findings': [],
+     'expected_safe': 0,
+     'expected_exit': 0,
+     'now': '2026-11-11',
+     'days': 90})
+
     write_case("fault_valid_until_key_in_code", {
         "src/config.py": 'LICENSE_VALID_UNTIL = "2020-06-01"  # checked at boot\n',
     }, {"description": "fault: expiry-key date outside a fixture path "
