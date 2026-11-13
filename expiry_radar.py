@@ -990,15 +990,48 @@ def scan_jwks(text: str, rel: str, now, days, warnings):
 OPENSSL_MONTHS = {
     "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
     "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5,
+    "june": 6, "july": 7, "august": 8, "september": 9, "october": 10,
+    "november": 11, "december": 12,
 }
+# Fixed UTC offsets (minutes) for the zone abbreviations committed
+# openssl output carries in the wild, under their conventional
+# North-American / European / Asia-Pacific meanings. A zone token that
+# is neither in this table nor a numeric +-HHMM offset is not guessed
+# at — the line simply does not match.
+OPENSSL_ZONE_OFFSETS = {
+    "gmt": 0, "utc": 0, "ut": 0,
+    "est": -300, "edt": -240, "cst": -360, "cdt": -300,
+    "mst": -420, "mdt": -360, "pst": -480, "pdt": -420,
+    "akst": -540, "akdt": -480, "hst": -600,
+    "cet": 60, "cest": 120, "eet": 120, "eest": 180, "bst": 60,
+    "jst": 540, "kst": 540, "aest": 600, "aedt": 660,
+    "nzst": 720, "nzdt": 780,
+}
+_NUMERIC_ZONE_RE = re.compile(r"([+-])(\d{2}):?(\d{2})")
+
+
+def _openssl_zone_offset(token):
+    """Minutes east of UTC for a zone token, or None when unknown."""
+    m = _NUMERIC_ZONE_RE.fullmatch(token)
+    if m:
+        minutes = int(m.group(2)) * 60 + int(m.group(3))
+        return minutes if m.group(1) == "+" else -minutes
+    return OPENSSL_ZONE_OFFSETS.get(token.lower())
+
+
 # The two canonical committed-output shapes: `openssl x509 -dates` /
 # `-enddate` prints `notAfter=Dec 10 23:59:59 2027 GMT`; `-text` prints
 # `Not After : Dec 10 …GMT`. `notBefore` / `Not Before` never match —
-# a start date is not an expiry. The full timestamp + GMT is required,
-# so prose mentions do not match.
+# a start date is not an expiry. The full timestamp + a recognised zone
+# (GMT/UTC, a common abbreviation, or a numeric offset) is required,
+# so prose mentions do not match. Month names may be abbreviated or
+# full (`Jan` / `January`); other tools rendering the same openssl
+# shapes also spell the month out and print local zone abbreviations.
 OPENSSL_NOTAFTER_RE = re.compile(
     r"(?:notAfter\s*=|Not\s+After\s*:)\s*"
-    r"([A-Za-z]{3})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})\s+(\d{4})\s+GMT",
+    r"([A-Za-z]+)\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})\s+(\d{4})\s+"
+    r"([A-Za-z]+|[+-]\d{2}:?\d{2})",
     re.IGNORECASE)
 
 
@@ -1011,6 +1044,9 @@ def scan_openssl_text(text: str, rel: str, now, days):
             month = OPENSSL_MONTHS.get(match.group(1).lower())
             if month is None:
                 continue
+            offset = _openssl_zone_offset(match.group(7))
+            if offset is None:
+                continue  # unrecognised zone — do not guess
             try:
                 expiry = datetime(
                     int(match.group(6)), month, int(match.group(2)),
@@ -1018,6 +1054,7 @@ def scan_openssl_text(text: str, rel: str, now, days):
                     int(match.group(5)), tzinfo=timezone.utc)
             except ValueError:
                 continue  # e.g. Feb 30 — not a real date
+            expiry -= timedelta(minutes=offset)
             if evidence is None:
                 evidence = _mask_evidence(line.strip())
             status, days_left = classify(expiry, now, days)

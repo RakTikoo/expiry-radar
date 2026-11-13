@@ -1,0 +1,8 @@
+{
+  "description": "clean: traps for the month-name/openssl extension — month-name dates in changelog prose, Not Before lines (start dates), an unknown zone abbreviation, and a notAfter with no zone at all; none may flag",
+  "expected_findings": [],
+  "expected_safe": 0,
+  "expected_exit": 0,
+  "now": "2026-11-11",
+  "days": 90
+}
