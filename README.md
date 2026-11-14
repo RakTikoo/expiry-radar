@@ -2,6 +2,8 @@
 
 **Expiry Radar finds everything in your repo that will break on a known future date — expiring X.509 certificates, committed JWTs past their `exp`, and hardcoded valid-until dates in test fixtures — before your CI finds out the hard way.**
 
+![Expiry Radar terminal demo](expiry-radar.gif)
+
 One job, done deterministically: walk the git-tracked files, parse the
 dates that are already sitting there, and report days-to-expiry per item.
 Python standard library only. No network, no account, no token, no LLM.
