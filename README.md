@@ -69,6 +69,13 @@ pip install git+https://github.com/RakTikoo/expiry-radar
 expiry-radar /path/to/repo
 ```
 
+The same command via pipx or uv:
+
+```bash
+pipx install git+https://github.com/RakTikoo/expiry-radar
+uv tool install git+https://github.com/RakTikoo/expiry-radar
+```
+
 ```bash
 python3 expiry_radar.py .                     # text report
 python3 expiry_radar.py . --json              # JSON report
