@@ -31,6 +31,13 @@ pip install git+https://github.com/RakTikoo/expiry-radar
 
 The pip route provides the `expiry-radar` command, with the same flags.
 
+The same command via pipx or uv:
+
+```bash
+pipx install git+https://github.com/RakTikoo/expiry-radar
+uv tool install git+https://github.com/RakTikoo/expiry-radar
+```
+
 ## Run
 
 Scan a repository:
@@ -47,7 +54,9 @@ python3 expiry_radar.py . --json
 
 Useful flags: `--days 30` narrows the warning window (default 90),
 `--now 2027-01-01` asks "what breaks by this date?", `--show-safe`
-lists safe artefacts too, `--sarif` emits SARIF 2.1.0 (not with `--json`).
+lists safe artefacts too, `--sarif` emits SARIF 2.1.0 (not with `--json`),
+`--max-file-size N` skips files larger than N bytes (default 5 MiB);
+skipped files are reported as unscanned.
 
 ## Reading the results
 
@@ -64,7 +73,9 @@ Findings name the artefact kind, file and line, expiry instant, and
 the certificate subject/issuer where there is one. JWTs are never
 printed in full (first 8 characters only; `iss`/`sub`/`aud` never).
 Files the scan could not read are listed as unscanned, never silently
-passed. The JSON report carries `findings`, `summary`, `exit_code`,
+passed. Files matched by an `expiry-radar.ignore` file in the scan root
+(one glob or substring per line) are skipped the same way, with the
+ignore file named as the reason. The JSON report carries `findings`, `summary`, `exit_code`,
 `files_scanned`, `unscanned` and `suppressed_in_docs`.
 
 ## Limits
