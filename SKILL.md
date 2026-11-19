@@ -29,8 +29,7 @@ Or install it as a command with pip (same single file):
 pip install git+https://github.com/RakTikoo/expiry-radar
 ```
 
-The pip route provides the `expiry-radar` command; with the file, run
-`python3 expiry_radar.py` instead — the flags are the same.
+The pip route provides the `expiry-radar` command, with the same flags.
 
 ## Run
 
