@@ -1,0 +1,8 @@
+{
+  "description": "clean: a license renewal falls outside the 90-day window",
+  "now": "2026-11-11",
+  "expected_findings": [],
+  "expected_safe": 1,
+  "expected_exit": 0,
+  "days": 90
+}

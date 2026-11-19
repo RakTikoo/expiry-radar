@@ -1,0 +1,13 @@
+{
+  "description": "fault: a support validity deadline in prose has passed",
+  "now": "2026-11-11",
+  "expected_findings": [
+    {
+      "kind": "fixture-date",
+      "status": "expired"
+    }
+  ],
+  "expected_safe": 0,
+  "expected_exit": 2,
+  "days": 90
+}

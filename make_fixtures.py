@@ -213,6 +213,19 @@ def main() -> int:
                         "history, not expiry fixtures",
         "expected_findings": [], "expected_safe": 0, "expected_exit": 0})
 
+    write_case("clean_renewal_date_far_future", {
+        "testdata/license-renewal.txt": "License renews on 2027-03-01.\n",
+    }, {"description": "clean: a license renewal falls outside the 90-day window",
+        "now": "2026-11-11", "expected_findings": [],
+        "expected_safe": 1, "expected_exit": 0})
+
+    write_case("clean_renewal_history_without_expiry", {
+        "testdata/license-history.txt": "The support policy was introduced on 2021-09-10.\n",
+        "CHANGELOG.md": "# Changelog\n\nOn 2023-03-01 we added a renewal reminder.\n",
+    }, {"description": "clean: history mentioning old dates is not a renewal deadline",
+        "now": "2026-11-11", "expected_findings": [],
+        "expected_safe": 0, "expected_exit": 0})
+
     write_case("clean_stamp_dates_in_samples", {
         "samples/good/led-board.kicad_sch":
             '(kicad_sch (version 20230121)\n'
@@ -321,6 +334,20 @@ def main() -> int:
                         "(two dates on two lines = two findings)",
         "expected_findings": [{"kind": "fixture-date", "status": "expiring"},
                               {"kind": "fixture-date", "status": "expiring"}],
+        "expected_safe": 0, "expected_exit": 1})
+
+    write_case("fault_renewal_date_past", {
+        "testdata/support.txt": "Support contract valid until 2026-02-14.\n",
+    }, {"description": "fault: a support validity deadline in prose has passed",
+        "now": "2026-11-11",
+        "expected_findings": [{"kind": "fixture-date", "status": "expired"}],
+        "expected_safe": 0, "expected_exit": 2})
+
+    write_case("fault_renewal_date_within_window", {
+        "tests/fixtures/subscription.txt": "Subscription renews on 2026-11-24.\n",
+    }, {"description": "fault: a subscription renewal in prose is inside the warning window",
+        "now": "2026-11-11",
+        "expected_findings": [{"kind": "fixture-date", "status": "expiring"}],
         "expected_safe": 0, "expected_exit": 1})
 
     # Fixed-clock ISO datetime regressions survive full corpus regeneration.
