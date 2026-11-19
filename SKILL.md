@@ -12,9 +12,8 @@ compatibility: Requires Python 3.9+. Nothing to install beyond the single file; 
 Expiry Radar scans a repository for things that stop working on a known
 date: X.509 certificates, committed JWTs with an `exp` claim, and
 hardcoded expiry dates in fixtures and config files. It reports each
-artefact, where it lives, and the date it expires. It only reads the
-repo — it never connects to a server, and never renews or replaces
-anything.
+artefact and its expiry date. It only reads the repo — it never
+connects to a server, and never renews or replaces anything.
 
 ## Install
 
@@ -76,7 +75,6 @@ passed. The JSON report carries `findings`, `summary`, `exit_code`,
 - Certificates inside a password-encrypted PKCS#12 container cannot be
   read; the scan reports the container with a warning instead of
   passing it silently.
-- Date formats: ISO `YYYY-MM-DD`, epoch-seconds on expiry keys, and
-  OpenSSL `notAfter` text. `MM/DD/YYYY` and natural-language dates are
-  out of scope.
+- Date formats: ISO `YYYY-MM-DD`, epoch-seconds on expiry keys,
+  OpenSSL `notAfter` text. `MM/DD/YYYY` and prose dates are out.
 - Not a secret scanner: a JWT is reported for its expiry, not as a leak.
