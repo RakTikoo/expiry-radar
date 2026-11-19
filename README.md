@@ -242,6 +242,15 @@ For a whole-repo scan from Python, call
 `expiry_radar.scan(root, now, days)` and render the result with
 `render_text` / `to_json_dict`.
 
+## Use with an AI agent
+
+This repo ships a [SKILL.md](SKILL.md) written to the Agent Skills open
+standard. If your coding agent supports skills, point it at this repo
+and it can fetch Expiry Radar, scan your repo for expiring certificates
+and tokens, and read the verdict for you. The skill works as promised
+when the repo is cloned under its real name (`expiry-radar`) — the
+standard ties the skill's name to its folder.
+
 ## MVP scope — what is NOT in v1
 
 - **No live-endpoint probing.** Nothing connects to your servers; only
