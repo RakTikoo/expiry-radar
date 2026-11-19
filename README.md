@@ -1,5 +1,7 @@
 # ⏰ Expiry Radar — find certificates and tokens in your repo that will expire
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/RakTikoo/expiry-radar)
+
 [![Tests](https://github.com/RakTikoo/expiry-radar/actions/workflows/tests.yml/badge.svg)](https://github.com/RakTikoo/expiry-radar/actions/workflows/tests.yml)
 
 **Expiry Radar finds everything in your repo that will break on a known future date — expiring X.509 certificates, committed JWTs past their `exp`, and hardcoded valid-until dates in test fixtures — before your CI finds out the hard way.**
@@ -84,6 +86,8 @@ python3 expiry_radar.py . --days 30           # warn only within 30 days
 python3 expiry_radar.py . --show-safe         # also list safe artefacts
 python3 expiry_radar.py . --now 2027-01-01    # "what breaks by New Year?"
 ```
+
+**For agent users:** this repository ships a `SKILL.md` for AI agents. Install it with `npx skills add RakTikoo/expiry-radar`.
 
 ### Exit codes
 
