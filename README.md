@@ -1,4 +1,4 @@
-# ⏰ Expiry Radar
+# ⏰ Expiry Radar — find certificates and tokens in your repo that will expire
 
 [![Tests](https://github.com/RakTikoo/expiry-radar/actions/workflows/tests.yml/badge.svg)](https://github.com/RakTikoo/expiry-radar/actions/workflows/tests.yml)
 
@@ -10,6 +10,11 @@ One job, done deterministically: walk the git-tracked files, parse the
 dates that are already sitting there, and report days-to-expiry per item.
 Python standard library only. No network, no account, no token, no LLM.
 Scanned files are read as bytes and never executed.
+
+**Install in one step:** `pip install git+https://github.com/RakTikoo/expiry-radar`,
+then run `expiry-radar /path/to/repo` — or just download the single
+`expiry_radar.py` file and run it with Python 3.9+. Full options are
+under [Install & run](#install--run).
 
 **First contribution?** Start with a [good first issue](https://github.com/RakTikoo/expiry-radar/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
 

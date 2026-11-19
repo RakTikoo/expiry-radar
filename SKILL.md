@@ -1,6 +1,6 @@
 ---
 name: expiry-radar
-description: Find artefacts in a repository that will break on a known future date — expired or expiring X.509 certificates (PEM, DER, PKCS#12, PKCS#7, embedded), committed JWTs past their exp claim, and hardcoded valid-until or expires dates in fixtures and config. Use when asked to check a repo for expiring certs or tokens, when a test suite or demo might fail because a fixture certificate expired, before a release, or when asking what breaks by a given date.
+description: Find artefacts in a repository that will break on a known future date — expired or expiring X.509 certificates (PEM, DER, PKCS#12, PKCS#7, embedded), committed JWTs past their exp claim, and hardcoded valid-until or expires dates in fixtures and config. Use when asked to check a repo for expiring certs or tokens, when a test suite or demo might fail because a fixture certificate expired, before a release, or when asking what breaks by a given date. Not for monitoring live production endpoints or renewing certificates, and not for scanning AI-agent skills (use skillscan).
 license: MIT
 compatibility: Requires Python 3.9+. Nothing to install beyond the single file; scanning is fully offline and uses only the Python standard library.
 ---
