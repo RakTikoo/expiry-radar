@@ -63,7 +63,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MiB — larger files are listed as unscanned
 DEFAULT_DAYS = 90

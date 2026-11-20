@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "expiry-radar"
-version = "0.3.0"
+version = "0.3.1"
 description = "Find expiring certificates, JWTs and hardcoded valid-until dates in a repo before they break it. Single file, stdlib only."
 readme = "README.md"
 requires-python = ">=3.9"

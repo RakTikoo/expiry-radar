@@ -56,10 +56,10 @@ nobody runs.
 ## Install & run
 
 Expiry Radar is a single file, Python 3.9+, nothing to install.
-Get the file (pinned to the v0.3.0 release):
+Get the file (pinned to the v0.3.1 release):
 
 ```bash
-curl -O https://raw.githubusercontent.com/RakTikoo/expiry-radar/v0.3.0/expiry_radar.py
+curl -O https://raw.githubusercontent.com/RakTikoo/expiry-radar/v0.3.1/expiry_radar.py
 python3 expiry_radar.py /path/to/repo
 ```
 
@@ -213,7 +213,7 @@ repo ships one for its own test corpus.
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: RakTikoo/expiry-radar@v0.3.0
+- uses: RakTikoo/expiry-radar@v0.3.1
 ```
 
 Or copy [`examples/expiry-radar.yml`](examples/expiry-radar.yml) into

@@ -54,7 +54,7 @@ jobs:
       # issue step below, and only a usage error (3) fails the job.
       - name: Run Expiry Radar
         id: scan
-        uses: RakTikoo/expiry-radar@v0.3.0
+        uses: RakTikoo/expiry-radar@v0.3.1
         continue-on-error: true
 
       - name: Open or update the ⏰ Expiry Radar issue

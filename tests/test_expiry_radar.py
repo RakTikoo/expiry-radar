@@ -1146,7 +1146,7 @@ class TestSarif(unittest.TestCase):
         self.assertIn("sarif-2.1.0", doc["$schema"])
         run = doc["runs"][0]
         self.assertEqual(run["tool"]["driver"]["name"], "Expiry Radar")
-        self.assertEqual(run["tool"]["driver"]["version"], "0.3.0")
+        self.assertEqual(run["tool"]["driver"]["version"], "0.3.1")
         json.dumps(doc)  # serialisable
 
     def test_results_crosscheck_json(self):

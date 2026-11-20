@@ -2,9 +2,9 @@
 
 All notable changes to Expiry Radar, newest first. Versions are tagged
 on GitHub (`v0.1`, `v0.2`, …) and consumers pin them as
-`uses: RakTikoo/expiry-radar@v0.3.0`.
+`uses: RakTikoo/expiry-radar@v0.3.1`.
 
-## Unreleased
+## v0.3.1 — 2026-11-20
 
 - **Packaging**: new `pyproject.toml` —
   `pip install git+https://github.com/RakTikoo/expiry-radar` now
@@ -17,6 +17,13 @@ on GitHub (`v0.1`, `v0.2`, …) and consumers pin them as
   `examples/expiry-radar.yml` now uses the published Action instead
   of teaching a vendored copy; new "Use as a library" README section
   (`parse_certificate_der`, `classify`, `scan`).
+- **Docs**: README gains the DeepWiki badge, the `npx skills add`
+  agent-install line, and `CITATION.cff` / `codemeta.json` citation
+  metadata; the SKILL.md copies document the pipx/uv install routes,
+  the `--max-file-size` flag, and the `expiry-radar.ignore` mechanism.
+  This release exists so the release tag contains the packaging and
+  docs above — the v0.3.0 tag predates them. The scanner's detection
+  behaviour is unchanged.
 
 ## v0.3.0 — 2026-11-14
 

@@ -17,10 +17,10 @@ connects to a server, and never renews or replaces anything.
 
 ## Install
 
-Expiry Radar is a single file. Get it pinned to the v0.3.0 release:
+Expiry Radar is a single file. Get it pinned to the v0.3.1 release:
 
 ```bash
-curl -O https://raw.githubusercontent.com/RakTikoo/expiry-radar/v0.3.0/expiry_radar.py
+curl -O https://raw.githubusercontent.com/RakTikoo/expiry-radar/v0.3.1/expiry_radar.py
 ```
 
 Or install it as a command with pip (same single file):

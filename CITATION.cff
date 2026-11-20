@@ -3,8 +3,8 @@ message: "If you use this software, please cite it as below."
 authors:
   - name: RakTikoo
 title: "expiry-radar: find certificates and tokens in your repo that will expire"
-version: 0.3.0
-date-released: 2026-11-14
+version: 0.3.1
+date-released: 2026-11-20
 license: MIT
 url: "https://github.com/RakTikoo/expiry-radar"
 repository-code: "https://github.com/RakTikoo/expiry-radar"
